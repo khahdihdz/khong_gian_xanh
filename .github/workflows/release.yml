@@ -1,0 +1,81 @@
+name: Build & Release Firmware
+
+# Tự động chạy sau mỗi lần push vào nhánh main (bỏ qua nếu chỉ sửa README/docs)
+on:
+  push:
+    branches: [ "main" ]
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+  workflow_dispatch: {} # cho phép chạy tay từ tab Actions nếu cần
+
+permissions:
+  contents: write # cần quyền ghi để tạo Release + upload file
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Lấy mã nguồn
+        uses: actions/checkout@v4
+
+      - name: Cài Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Cache thư viện PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+
+      - name: Cài PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build firmware (app)
+        run: pio run -e esp32dev
+
+      - name: Build filesystem image (LittleFS - data/)
+        run: pio run -e esp32dev -t buildfs
+
+      - name: Đọc số phiên bản từ config.h
+        id: ver
+        run: |
+          VERSION=$(grep -oP '#define FIRMWARE_VERSION\s+"\K[^"]+' src/config.h)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Chuẩn bị file đính kèm Release
+        id: files
+        run: |
+          mkdir -p release_assets
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          TAG="v${{ steps.ver.outputs.version }}-${SHORT_SHA}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          cp .pio/build/esp32dev/firmware.bin \
+             "release_assets/khong-gian-xanh-firmware-v${{ steps.ver.outputs.version }}.bin"
+          cp .pio/build/esp32dev/littlefs.bin \
+             "release_assets/khong-gian-xanh-littlefs-v${{ steps.ver.outputs.version }}.bin"
+
+      - name: Tạo Release & đính kèm file .bin
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.files.outputs.tag }}
+          name: "Không Gian Xanh v${{ steps.ver.outputs.version }} (build ${{ github.run_number }})"
+          body: |
+            🌿 **Không Gian Xanh** - Build tự động từ commit `${{ github.sha }}`
+
+            ### File đính kèm
+            - `khong-gian-xanh-firmware-v${{ steps.ver.outputs.version }}.bin` — nạp qua trang **Cập nhật Firmware (OTA)** trong mục Chức năng, hoặc `esptool.py`/PlatformIO khi cắm dây USB.
+            - `khong-gian-xanh-littlefs-v${{ steps.ver.outputs.version }}.bin` — ảnh hệ thống file chứa giao diện web (`index.html`, `tools.html`, `wifi_config.html`). Chỉ cần nạp lại nếu giao diện web có thay đổi.
+
+            ### Ghi chú
+            Muốn tăng số phiên bản, sửa `FIRMWARE_VERSION` trong `src/config.h` trước khi push.
+          files: |
+            release_assets/*.bin
+          generate_release_notes: true
