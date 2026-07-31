@@ -172,7 +172,46 @@ pio device monitor
 | `/update` | GET | Trang cập nhật firmware OTA (ElegantOTA) |
 | `/ws` | WebSocket | Đẩy dữ liệu realtime mỗi 2 giây |
 
-## 7. Ngưỡng cảnh báo mặc định (chỉnh trong `config.h`)
+## 7. Tự động Build & Release (GitHub Actions)
+
+Mỗi khi push code lên nhánh `main` (trừ khi chỉ sửa file `.md`), GitHub Actions sẽ tự động:
+
+1. Build firmware bằng PlatformIO (`pio run`).
+2. Build ảnh hệ thống file LittleFS chứa giao diện web (`pio run -t buildfs`).
+3. Tạo một **Release** mới trên GitHub, gắn tag dạng `v<phiên_bản>-<mã_commit>`.
+4. Đính kèm 2 file `.bin`:
+   - `khong-gian-xanh-firmware-v<version>.bin` — firmware chính.
+   - `khong-gian-xanh-littlefs-v<version>.bin` — ảnh giao diện web (LittleFS).
+
+File workflow: `.github/workflows/release.yml`.
+
+### Cách tăng số phiên bản
+Sửa dòng `FIRMWARE_VERSION` trong `src/config.h` trước khi push:
+```cpp
+#define FIRMWARE_VERSION "1.0.1"
+```
+
+### Cách nạp file `.bin` tải từ trang Releases
+
+**Firmware (`khong-gian-xanh-firmware-*.bin`) — có 2 cách:**
+- **OTA qua web (khuyến nghị, không cần dây):** vào trang **Chức năng → Cập nhật Firmware**
+  (`/update`) trên dashboard, chọn file `.bin` vừa tải, bấm Upload.
+- **Qua USB:** dùng `esptool.py`:
+  ```bash
+  esptool.py --chip esp32 --port <COM_PORT> --baud 921600 write_flash 0x10000 khong-gian-xanh-firmware-v1.0.0.bin
+  ```
+
+**Filesystem (`khong-gian-xanh-littlefs-*.bin`) — chỉ cần nạp lại khi giao diện web thay đổi:**
+- Cách đơn giản nhất: build từ mã nguồn rồi chạy `pio run --target uploadfs`.
+- Hoặc nạp trực tiếp qua USB bằng `esptool.py` (offset phụ thuộc bảng phân vùng
+  `min_spiffs.csv` đang dùng, thường là `0x3D0000` — nên kiểm tra lại bằng lệnh
+  `pio run -t uploadfs --verbose` trên máy có mã nguồn để lấy offset chính xác trước khi flash):
+  ```bash
+  esptool.py --chip esp32 --port <COM_PORT> --baud 921600 write_flash 0x3D0000 khong-gian-xanh-littlefs-v1.0.0.bin
+  ```
+- Trang OTA (`/update`) hiện chỉ hỗ trợ cập nhật firmware, chưa hỗ trợ cập nhật filesystem qua mạng.
+
+## 8. Ngưỡng cảnh báo mặc định (chỉnh trong `config.h`)
 
 - Nhiệt độ > 35°C
 - Độ ẩm > 80%
