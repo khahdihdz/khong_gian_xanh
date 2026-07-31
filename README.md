@@ -110,8 +110,9 @@ khong_gian_xanh/
 │   ├── web_server.h/.cpp       # Web server, WebSocket, REST API, OTA
 │   └── storage.h / storage.cpp # Ring-buffer lịch sử 1000 bản ghi, xuất JSON/CSV
 └── data/                     # Nội dung upload lên LittleFS (giao diện web)
-    ├── index.html             # Dashboard chính (Bootstrap 5 + Chart.js, dark mode)
-    └── wifi_config.html        # Trang cấu hình WiFi
+    ├── index.html             # Dashboard chính - CHỈ hiển thị theo dõi (Bootstrap 5 + Chart.js, dark mode)
+    ├── tools.html              # Trang chức năng: xuất CSV, cấu hình WiFi, OTA, thông tin thiết bị
+    └── wifi_config.html        # Trang cấu hình WiFi (mở từ tools.html)
 ```
 
 > Nếu dùng **Arduino IDE** thay vì PlatformIO: tạo 1 thư mục sketch tên `khong_gian_xanh`,
