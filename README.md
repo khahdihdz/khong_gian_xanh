@@ -6,6 +6,8 @@ Hệ thống theo dõi nhiệt độ, độ ẩm và chất lượng không khí
 hiển thị trên màn hình OLED và Web Dashboard realtime (WebSocket),
 kèm cảnh báo LED/Buzzer, lưu lịch sử, xuất CSV, và cập nhật firmware OTA.
 
+💛 Dashboard có nút **"Ủng hộ"** liên kết tới [khahdihdz.github.io](https://khahdihdz.github.io) nếu bạn muốn ủng hộ tác giả.
+
 ---
 
 ## 1. Sơ đồ nối dây
@@ -72,7 +74,7 @@ kèm cảnh báo LED/Buzzer, lưu lịch sử, xuất CSV, và cập nhật firm
 | Adafruit Unified Sensor | Adafruit | Phụ thuộc của DHT library |
 | Adafruit GFX Library | Adafruit | Vẽ đồ hoạ OLED |
 | Adafruit SSD1306 | Adafruit | Điều khiển màn hình OLED |
-| SparkFun ENS160 | SparkFun | Đọc TVOC/eCO2/AQI |
+| SparkFun Indoor Air Quality Sensor - ENS160 Arduino Library | SparkFun | Đọc TVOC/eCO2/AQI (cài qua link GitHub, xem lưu ý bên dưới) |
 | ESPAsyncWebServer | ESP32Async (fork mới) | Web server + WebSocket bất đồng bộ |
 | AsyncTCP | ESP32Async (fork mới) | Phụ thuộc bắt buộc của ESPAsyncWebServer |
 | ElegantOTA | ayushsharma82 | Cập nhật firmware qua web tại `/update` |
@@ -80,6 +82,15 @@ kèm cảnh báo LED/Buzzer, lưu lịch sử, xuất CSV, và cập nhật firm
 > **Lưu ý:** dùng bản fork **ESP32Async/ESPAsyncWebServer** và **ESP32Async/AsyncTCP**
 > (bản mới nhất, tương thích ESP32 core 3.x). Bản cũ của `me-no-dev` đã ngừng cập nhật
 > và có thể lỗi biên dịch với Arduino core mới.
+
+> **Lưu ý về SparkFun ENS160:** thư viện này chưa được đăng ký lên PlatformIO Registry
+> (chỉ tồn tại dưới dạng Arduino Library trên GitHub), nên `platformio.ini` khai báo
+> trực tiếp bằng link Git thay vì tên registry:
+> ```ini
+> https://github.com/sparkfun/SparkFun_Indoor_Air_Quality_Sensor-ENS160_Arduino_Library.git
+> ```
+> Nếu dùng Arduino IDE, tìm "ENS160" trong Library Manager (chọn bản của **SparkFun Electronics**)
+> hoặc tải .zip trực tiếp từ GitHub rồi **Add .ZIP Library**.
 
 ### Cài bằng PlatformIO (khuyến nghị)
 Đã khai báo sẵn trong `platformio.ini`, chỉ cần build là PlatformIO tự tải thư viện.
@@ -110,7 +121,7 @@ khong_gian_xanh/
 │   ├── web_server.h/.cpp       # Web server, WebSocket, REST API, OTA
 │   └── storage.h / storage.cpp # Ring-buffer lịch sử 1000 bản ghi, xuất JSON/CSV
 └── data/                     # Nội dung upload lên LittleFS (giao diện web)
-    ├── index.html             # Dashboard chính - CHỈ hiển thị theo dõi (Bootstrap 5 + Chart.js, dark mode)
+    ├── index.html             # Dashboard chính - CHỈ hiển thị theo dõi (Bootstrap 5 + Chart.js, dark mode, có nút "❤️ Ủng hộ")
     ├── tools.html              # Trang chức năng: xuất CSV, cấu hình WiFi, OTA, thông tin thiết bị
     └── wifi_config.html        # Trang cấu hình WiFi (mở từ tools.html)
 ```
