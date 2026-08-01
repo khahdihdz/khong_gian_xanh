@@ -150,7 +150,24 @@ pio device monitor
 
 ⚠️ **Thứ tự quan trọng:** luôn chạy `uploadfs` sau khi `upload`, nếu không trang web sẽ trả về lỗi 404.
 
-### Cách B — Arduino IDE
+### Cách B — Termux (điện thoại Android, không cần máy tính)
+
+Yêu cầu: cáp OTG + cáp nạp USB-Serial (CP2102/CH340...) nối ESP32 với điện thoại.
+
+```bash
+pkg install -y python git termux-api   # termux-api chỉ cần nếu cổng không tự hiện
+./flash.sh
+```
+
+`flash.sh` sẽ tự làm tất cả: cài PlatformIO (lần đầu), dò tìm ESP32 qua OTG
+(`/dev/ttyUSB*`/`/dev/ttyACM*`, xin quyền USB qua `termux-usb` nếu cần), biên dịch,
+nạp firmware, rồi nạp luôn filesystem `data/` nếu thư mục này tồn tại — không cần
+gõ thêm lệnh nào khác.
+
+> Nếu điện thoại hiện popup xin quyền truy cập USB, hãy bấm **Cho phép**.
+> Nếu ESP32 không tự vào chế độ nạp, giữ nút **BOOT** trên board khi script bắt đầu nạp.
+
+### Cách C — Arduino IDE
 
 1. Cài ESP32 board package (`esp32` by Espressif Systems) qua Boards Manager.
 2. Chọn board: **ESP32 Dev Module**.
