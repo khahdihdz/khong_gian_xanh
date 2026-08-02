@@ -173,14 +173,18 @@ gõ thêm lệnh nào khác.
 
 ### Cách D — esp32-android-toolkit (khuyến nghị cho Android, không cần build trên máy)
 
-Dùng bộ công cụ [esp32-android-toolkit](../esp32-android-toolkit) — nạp firmware đã build
-sẵn (từ GitHub Release) thông qua Android USB Host API trực tiếp, không qua `pyserial`
-nên ổn định hơn trên Android.
+`esp32-android-toolkit` là **một repo riêng biệt**, không nằm trong repo này — cần clone
+hoặc tải về máy/điện thoại độc lập. Nó nạp firmware đã build sẵn (từ GitHub Release
+của repo `khong_gian_xanh` này) thông qua Android USB Host API trực tiếp, không qua
+`pyserial` nên ổn định hơn trên Android.
 
 ```bash
-# 1. Tải file khong-gian-xanh-toolkit-vX.Y.Z.zip từ trang Release của repo này
-# 2. Giải nén, chép thư mục firmware/ bên trong đè vào firmware/ của esp32-android-toolkit
+# 1. Clone repo toolkit về (nếu chưa có), lần này ở ngoài repo khong_gian_xanh
+git clone <link-repo-esp32-android-toolkit-của-bạn>
 cd esp32-android-toolkit
+
+# 2. Tải file khong-gian-xanh-toolkit-vX.Y.Z.zip từ trang Release của repo khong_gian_xanh
+# 3. Giải nén, chép thư mục firmware/ bên trong đè vào firmware/ của esp32-android-toolkit
 ./flash.sh
 ```
 
