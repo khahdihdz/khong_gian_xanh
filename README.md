@@ -150,7 +150,7 @@ pio device monitor
 
 ⚠️ **Thứ tự quan trọng:** luôn chạy `uploadfs` sau khi `upload`, nếu không trang web sẽ trả về lỗi 404.
 
-### Cách B — Termux (điện thoại Android, không cần máy tính)
+### Cách B — Termux, build trực tiếp trên máy (điện thoại Android, không cần máy tính)
 
 Yêu cầu: cáp OTG + cáp nạp USB-Serial (CP2102/CH340...) nối ESP32 với điện thoại.
 
@@ -166,6 +166,26 @@ gõ thêm lệnh nào khác.
 
 > Nếu điện thoại hiện popup xin quyền truy cập USB, hãy bấm **Cho phép**.
 > Nếu ESP32 không tự vào chế độ nạp, giữ nút **BOOT** trên board khi script bắt đầu nạp.
+>
+> ⚠️ Cách này build/nạp trực tiếp bằng PlatformIO (`pio run --target upload`), nên
+> vẫn phụ thuộc `pyserial` để dò cổng USB — trên một số máy/bản Android việc này
+> không ổn định. Nếu gặp lỗi không nhận thiết bị, dùng **Cách D** bên dưới.
+
+### Cách D — esp32-android-toolkit (khuyến nghị cho Android, không cần build trên máy)
+
+Dùng bộ công cụ [esp32-android-toolkit](../esp32-android-toolkit) — nạp firmware đã build
+sẵn (từ GitHub Release) thông qua Android USB Host API trực tiếp, không qua `pyserial`
+nên ổn định hơn trên Android.
+
+```bash
+# 1. Tải file khong-gian-xanh-toolkit-vX.Y.Z.zip từ trang Release của repo này
+# 2. Giải nén, chép thư mục firmware/ bên trong đè vào firmware/ của esp32-android-toolkit
+cd esp32-android-toolkit
+./flash.sh
+```
+
+`flash.sh` của toolkit sẽ tự nạp cả `firmware.bin` lẫn `littlefs.bin` (dashboard web)
+ở đúng offset theo partition scheme `min_spiffs.csv` mà project này dùng.
 
 ### Cách C — Arduino IDE
 
