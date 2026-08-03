@@ -62,6 +62,31 @@ jobs:
           cp .pio/build/esp32dev/littlefs.bin \
              "release_assets/khong-gian-xanh-littlefs-v${{ steps.ver.outputs.version }}.bin"
 
+      - name: Đóng gói bộ file cho esp32-android-toolkit
+        id: toolkit
+        run: |
+          # esp32-android-toolkit (flash qua Termux/Android) cần đúng 5 file
+          # trong thư mục firmware/, tên cố định không kèm số version:
+          #   bootloader.bin, partitions.bin, boot_app0.bin,
+          #   firmware.bin, littlefs.bin
+          # boot_app0.bin là file chung của Arduino core, không đổi theo project.
+          mkdir -p toolkit_bundle/firmware
+          cp .pio/build/esp32dev/bootloader.bin  toolkit_bundle/firmware/bootloader.bin
+          cp .pio/build/esp32dev/partitions.bin  toolkit_bundle/firmware/partitions.bin
+          cp .pio/build/esp32dev/firmware.bin    toolkit_bundle/firmware/firmware.bin
+          cp .pio/build/esp32dev/littlefs.bin    toolkit_bundle/firmware/littlefs.bin
+
+          BOOT_APP0="$(find ~/.platformio/packages/framework-arduinoespressif32 -name boot_app0.bin | head -n1)"
+          if [ -z "$BOOT_APP0" ]; then
+            echo "::error::Không tìm thấy boot_app0.bin trong framework-arduinoespressif32"
+            exit 1
+          fi
+          cp "$BOOT_APP0" toolkit_bundle/firmware/boot_app0.bin
+
+          cd toolkit_bundle
+          zip -r "../release_assets/khong-gian-xanh-toolkit-v${{ steps.ver.outputs.version }}.zip" firmware
+          cd ..
+
       - name: Tạo Release & đính kèm file .bin
         uses: softprops/action-gh-release@v2
         with:
@@ -73,9 +98,11 @@ jobs:
             ### File đính kèm
             - `khong-gian-xanh-firmware-v${{ steps.ver.outputs.version }}.bin` — nạp qua trang **Cập nhật Firmware (OTA)** trong mục Chức năng, hoặc `esptool.py`/PlatformIO khi cắm dây USB.
             - `khong-gian-xanh-littlefs-v${{ steps.ver.outputs.version }}.bin` — ảnh hệ thống file chứa giao diện web (`index.html`, `tools.html`, `wifi_config.html`). Chỉ cần nạp lại nếu giao diện web có thay đổi.
+            - `khong-gian-xanh-toolkit-v${{ steps.ver.outputs.version }}.zip` — **dùng với esp32-android-toolkit (flash qua điện thoại Android/Termux)**: giải nén rồi chép cả thư mục `firmware/` bên trong đè vào thư mục `firmware/` của toolkit, sau đó chạy `./flash.sh`.
 
             ### Ghi chú
             Muốn tăng số phiên bản, sửa `FIRMWARE_VERSION` trong `src/config.h` trước khi push.
           files: |
             release_assets/*.bin
+            release_assets/*.zip
           generate_release_notes: true
