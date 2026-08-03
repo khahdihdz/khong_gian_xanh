@@ -2,13 +2,13 @@
 #include "config.h"
 
 #include <Wire.h>
-#include <DHT.h>
-#include <SparkFun_ENS160.h>   // Thư viện: "SparkFun ENS160" (quản lý bởi Library Manager)
+#include <Adafruit_SHT31.h>    // Thư viện: "Adafruit SHT31 Library"
+#include <SparkFun_ENS160.h>   // Thư viện: "SparkFun ENS160" (module ENS160+AHT21, chỉ dùng phần ENS160)
 
 // ============================================================
 //  ĐỐI TƯỢNG CẢM BIẾN
 // ============================================================
-static DHT dht(DHT_PIN, DHT_TYPE);
+static Adafruit_SHT31 sht31 = Adafruit_SHT31();
 static SparkFun_ENS160 ens160;
 
 // Biến toàn cục chia sẻ dữ liệu cảm biến
@@ -19,15 +19,24 @@ SensorData g_sensorData = {
     .eco2 = 0,
     .aqi = 0,
     .aqiLabel = "Chưa có dữ liệu",
-    .dhtOk = false,
+    .sht31Ok = false,
     .ens160Ok = false,
     .warning = false,
     .warningReason = "",
     .lastUpdateMs = 0
 };
 
-static unsigned long s_lastDhtRetryMs = 0;
+static unsigned long s_lastShtRetryMs = 0;
 static unsigned long s_lastEnsRetryMs = 0;
+
+// ------------------------------------------------------------
+//  Khởi tạo SHT31-D (thử cả 2 địa chỉ I2C phổ biến)
+// ------------------------------------------------------------
+static bool initSht31() {
+    if (sht31.begin(SHT31_ADDRESS)) return true;
+    if (sht31.begin(0x45)) return true;
+    return false;
+}
 
 // ------------------------------------------------------------
 //  Khởi tạo ENS160 (thử cả 2 địa chỉ I2C phổ biến)
@@ -37,7 +46,6 @@ static bool initEns160() {
         ens160.setOperatingMode(SFE_ENS160_STANDARD);
         return true;
     }
-    // Thử địa chỉ phụ 0x52 nếu 0x53 không phản hồi
     if (ens160.begin(Wire, 0x52)) {
         ens160.setOperatingMode(SFE_ENS160_STANDARD);
         return true;
@@ -52,18 +60,20 @@ bool sensorInit() {
     Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
     Wire.setClock(400000);
 
-    dht.begin();
-    g_sensorData.dhtOk = true; // DHT22 không có hàm kiểm tra begin(), coi như OK, sẽ tự phát hiện khi đọc lỗi
+    g_sensorData.sht31Ok = initSht31();
+    if (!g_sensorData.sht31Ok) {
+        Serial.println("[SENSOR] Cảnh báo: Không tìm thấy SHT31-D, sẽ thử lại định kỳ.");
+    }
 
     g_sensorData.ens160Ok = initEns160();
     if (!g_sensorData.ens160Ok) {
         Serial.println("[SENSOR] Cảnh báo: Không tìm thấy ENS160, sẽ thử lại định kỳ.");
     }
 
-    s_lastDhtRetryMs = millis();
+    s_lastShtRetryMs = millis();
     s_lastEnsRetryMs = millis();
 
-    return g_sensorData.dhtOk || g_sensorData.ens160Ok;
+    return g_sensorData.sht31Ok || g_sensorData.ens160Ok;
 }
 
 // ------------------------------------------------------------
@@ -71,6 +81,15 @@ bool sensorInit() {
 // ------------------------------------------------------------
 void sensorRetryIfNeeded() {
     unsigned long now = millis();
+
+    if (!g_sensorData.sht31Ok && (now - s_lastShtRetryMs >= SENSOR_ERROR_RETRY_MS)) {
+        s_lastShtRetryMs = now;
+        Serial.println("[SENSOR] Đang thử khởi tạo lại SHT31-D...");
+        g_sensorData.sht31Ok = initSht31();
+        if (g_sensorData.sht31Ok) {
+            Serial.println("[SENSOR] SHT31-D đã kết nối lại thành công.");
+        }
+    }
 
     if (!g_sensorData.ens160Ok && (now - s_lastEnsRetryMs >= SENSOR_ERROR_RETRY_MS)) {
         s_lastEnsRetryMs = now;
@@ -86,7 +105,6 @@ void sensorRetryIfNeeded() {
 //  Phân loại AQI -> nhãn tiếng Việt
 // ------------------------------------------------------------
 String sensorClassifyAQI(uint8_t aqiRaw, uint16_t tvoc, uint16_t eco2) {
-    // ENS160 trả AQI theo thang UBA 1-5
     String label;
     switch (aqiRaw) {
         case 1:  label = "Rất tốt";   break;
@@ -97,9 +115,8 @@ String sensorClassifyAQI(uint8_t aqiRaw, uint16_t tvoc, uint16_t eco2) {
         default: label = "Không xác định"; break;
     }
 
-    // Nếu TVOC hoặc eCO2 vượt ngưỡng nguy hiểm, nâng mức cảnh báo dù AQI thô còn thấp
     if (tvoc >= TVOC_WARNING_THRESHOLD || eco2 >= ECO2_WARNING_THRESHOLD) {
-        if (aqiRaw < 4) label = "Kém"; // ép mức tối thiểu là "Kém" khi vượt ngưỡng
+        if (aqiRaw < 4) label = "Kém";
     }
 
     return label;
@@ -118,11 +135,11 @@ void sensorEvaluateWarning() {
         g_sensorData.warning = true;
     };
 
-    if (g_sensorData.dhtOk && !isnan(g_sensorData.temperature) &&
+    if (g_sensorData.sht31Ok && !isnan(g_sensorData.temperature) &&
         g_sensorData.temperature > TEMP_WARNING_THRESHOLD) {
         appendReason("Nhiệt độ cao");
     }
-    if (g_sensorData.dhtOk && !isnan(g_sensorData.humidity) &&
+    if (g_sensorData.sht31Ok && !isnan(g_sensorData.humidity) &&
         g_sensorData.humidity > HUMIDITY_WARNING_THRESHOLD) {
         appendReason("Độ ẩm cao");
     }
@@ -141,23 +158,19 @@ void sensorEvaluateWarning() {
 //  Đọc toàn bộ cảm biến - KHÔNG BAO GIỜ làm treo chương trình
 // ------------------------------------------------------------
 void sensorRead() {
-    // --- Đọc DHT22 ---
-    float t = dht.readTemperature();
-    float h = dht.readHumidity();
+    if (g_sensorData.sht31Ok) {
+        float t = sht31.readTemperature();
+        float h = sht31.readHumidity();
 
-    if (isnan(t) || isnan(h)) {
-        // Đọc lỗi: đánh dấu lỗi, KHÔNG ghi đè dữ liệu cũ để dashboard không bị nhảy giá trị
-        if (g_sensorData.dhtOk) {
-            Serial.println("[SENSOR] Lỗi đọc DHT22!");
+        if (isnan(t) || isnan(h)) {
+            Serial.println("[SENSOR] Lỗi đọc SHT31-D!");
+            g_sensorData.sht31Ok = false;
+        } else {
+            g_sensorData.temperature = t;
+            g_sensorData.humidity = h;
         }
-        g_sensorData.dhtOk = false;
-    } else {
-        g_sensorData.temperature = t;
-        g_sensorData.humidity = h;
-        g_sensorData.dhtOk = true;
     }
 
-    // --- Đọc ENS160 ---
     if (g_sensorData.ens160Ok) {
         if (ens160.checkDataStatus()) {
             g_sensorData.aqi  = ens160.getAQI();
@@ -165,7 +178,6 @@ void sensorRead() {
             g_sensorData.eco2 = ens160.getECO2();
             g_sensorData.aqiLabel = sensorClassifyAQI(g_sensorData.aqi, g_sensorData.tvoc, g_sensorData.eco2);
         }
-        // Nếu không có dữ liệu mới (checkDataStatus == false) thì giữ nguyên giá trị cũ, không lỗi.
     } else {
         g_sensorData.aqiLabel = "Cảm biến lỗi";
     }

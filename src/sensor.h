@@ -13,7 +13,7 @@ struct SensorData {
     uint16_t eco2;           // ppm
     uint8_t  aqi;             // 1-5 (theo chuẩn ENS160)
     String   aqiLabel;       // Rất tốt / Tốt / Trung bình / Kém / Ô nhiễm
-    bool     dhtOk;           // Trạng thái DHT22
+    bool     sht31Ok;         // Trạng thái SHT31-D
     bool     ens160Ok;        // Trạng thái ENS160
     bool     warning;         // Có cảnh báo hay không
     String   warningReason;  // Lý do cảnh báo (ghép chuỗi)
@@ -24,7 +24,7 @@ struct SensorData {
 //  KHỞI TẠO / ĐỌC CẢM BIẾN
 // ============================================================
 
-// Khởi tạo I2C, DHT22, ENS160. Trả về true nếu ít nhất 1 cảm biến hoạt động.
+// Khởi tạo I2C, SHT31-D, ENS160. Trả về true nếu ít nhất 1 cảm biến hoạt động.
 bool sensorInit();
 
 // Cố gắng khởi tạo lại các cảm biến đang lỗi (gọi định kỳ trong loop, không chặn)

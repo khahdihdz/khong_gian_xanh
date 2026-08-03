@@ -96,7 +96,7 @@ void displayUpdate(const SensorData& data, const String& wifiStatus, const Strin
     // --- Cột trái: Nhiệt độ & Độ ẩm ---
     oled.drawBitmap(2, 15, ICON_TEMP, 8, 8, SSD1306_WHITE);
     oled.setCursor(13, 14);
-    if (data.dhtOk) {
+    if (data.sht31Ok) {
         oled.printf("%.1fC", data.temperature);
     } else {
         oled.print("Loi");
@@ -104,7 +104,7 @@ void displayUpdate(const SensorData& data, const String& wifiStatus, const Strin
 
     oled.drawBitmap(2, 27, ICON_DROP, 8, 8, SSD1306_WHITE);
     oled.setCursor(13, 26);
-    if (data.dhtOk) {
+    if (data.sht31Ok) {
         oled.printf("%.0f%%", data.humidity);
     } else {
         oled.print("Loi");

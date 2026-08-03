@@ -160,8 +160,8 @@ function aqiClass(status) {
 }
 
 function updateUI(d) {
-  document.getElementById('valTemp').textContent = d.dht_ok ? `${d.temperature.toFixed(1)}°C` : 'Lỗi';
-  document.getElementById('valHumidity').textContent = d.dht_ok ? `${d.humidity.toFixed(0)}%` : 'Lỗi';
+  document.getElementById('valTemp').textContent = d.sht31_ok ? `${d.temperature.toFixed(1)}°C` : 'Lỗi';
+  document.getElementById('valHumidity').textContent = d.sht31_ok ? `${d.humidity.toFixed(0)}%` : 'Lỗi';
   const aqiEl = document.getElementById('valAqi');
   aqiEl.textContent = d.ens160_ok ? d.status : 'Lỗi';
   aqiEl.className = 'metric-value ' + aqiClass(d.status);

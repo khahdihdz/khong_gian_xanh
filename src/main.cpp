@@ -3,7 +3,7 @@
  *  DỰ ÁN: KHÔNG GIAN XANH
  *  Hệ thống theo dõi môi trường phòng thời gian thực
  *  Nền tảng: ESP32 DevKit V1
- *  Cảm biến: DHT22 (nhiệt độ/độ ẩm) + ENS160 (TVOC/eCO2/AQI)
+ *  Cảm biến: SHT31-D (nhiệt độ/độ ẩm) + module ENS160+AHT21 (TVOC/eCO2/AQI)
  *  Hiển thị: OLED SSD1306 128x64 (I2C)
  *  Kết nối: WiFi (STA + AP fallback), Web Dashboard (WebSocket realtime)
  * ============================================================

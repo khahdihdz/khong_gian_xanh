@@ -10,71 +10,100 @@ kèm cảnh báo LED/Buzzer, lưu lịch sử, xuất CSV, và cập nhật firm
 
 ---
 
-## 1. Sơ đồ nối dây
+## 1. Linh kiện sử dụng
+
+| Linh kiện | Vai trò | Giao tiếp |
+|---|---|---|
+| [ESP32 DevKit (ESP-32/ESP-32S, 30 chân)](https://shopee.vn/B%E1%BA%A3ng-m%E1%BA%A1ch-ph%C3%A1t-tri%E1%BB%83n-ESP32-WiFi-Bluetooth-Ultra-Low-Power-Core-ESP-32-ESP-32S-ESP-32-Similar-ESP8266-ch%E1%BA%A5t-l%C6%B0%E1%BB%A3ng-cao-i.578443443.13742226706) | Vi điều khiển trung tâm | — |
+| [SHT31-D (module SHT31-D I2C)](https://shopee.vn/Sht31-Nhi%E1%BB%87t-%C4%90%E1%BB%99-SHT31-D-M%C3%B4-%C4%90un-C%E1%BA%A3m-Bi%E1%BA%BFn-%C4%90%E1%BB%99-%E1%BA%A8m-Vi-%C4%90i%E1%BB%81u-Khi%E1%BB%83n-IIC-I2C-%C4%90%E1%BB%99t-Ph%C3%A1-Th%E1%BB%9Di-Ti%E1%BA%BFt-3V-5V-T%C6%B0%C6%A1ng-Th%C3%ADch-Cho-Arduino-i.578443443.25738990383) | Nhiệt độ & độ ẩm | I2C |
+| [Module ENS160 + AHT21 (thay thế CCS811)](https://shopee.vn/C%E1%BA%A3m-bi%E1%BA%BFn-ch%E1%BA%A5t-l%C6%B0%E1%BB%A3ng-kh%C3%B4ng-kh%C3%AD-ENS160-AHT21-CO2-TVOC-eCO2-AQI-C%E1%BA%A3m-bi%E1%BA%BFn-thay-th%E1%BA%BF-CCS811-i.237617462.26627612199) | AQI / TVOC / eCO2 (chỉ dùng phần ENS160) | I2C |
+| [OLED SSD1306 0.96" 128x64](https://shopee.vn/M%C3%B4-%C4%90un-Hi%E1%BB%83N-Th%E1%BB%8B-OLED-4pin-7pin-0.96-IIC-I2C-OLED-0.96-inch-128X64-OLED-0.96-IIC-I2C-Chuy%C3%AAn-D%E1%BB%A5ng-Cho-arduino-i.578443443.23972641115) | Hiển thị tại chỗ | I2C (bản 4 chân) |
+| LED đơn (5mm) + điện trở 220Ω | Cảnh báo trực quan | GPIO |
+| Buzzer thụ động/chủ động 5V hoặc 3.3V | Cảnh báo âm thanh | GPIO |
+
+> So với bản thiết kế cũ dùng **DHT22** (giao tiếp 1 dây) và **ENS160** rời, bản này
+> chuyển hoàn toàn sang cảm biến **I2C**: DHT22 → **SHT31-D** (I2C, chính xác hơn,
+> không cần điện trở kéo lên), và ENS160 rời → **module ENS160+AHT21** (vẫn chỉ đọc
+> phần ENS160 cho AQI/TVOC/eCO2; chip AHT21 tích hợp sẵn trên module này không được
+> dùng tới vì nhiệt độ/độ ẩm đã lấy từ SHT31-D). Ưu điểm: cả 3 thiết bị cảm biến +
+> màn hình đều dùng chung 2 dây SDA/SCL, dây nối gọn hơn, không còn lo timing 1-wire
+> của DHT22.
+
+## 2. Sơ đồ nối dây
 
 ```
-                         ESP32 DevKit V1 (30 chân)
-                        ┌───────────────────────┐
-                        │                       │
-      DHT22             │                       │
-    ┌──────┐             │                       │
-    │  VCC │───────────► │ 3V3                   │
-    │  DATA│───────────► │ GPIO 4                │
-    │  GND │───────────► │ GND                   │
-    └──────┘             │                       │
-   (thêm điện trở kéo lên│                       │
-    10kΩ giữa VCC-DATA)  │                       │
-                        │                       │
-      OLED SSD1306      │                       │
-      (I2C 128x64)      │                       │
-    ┌──────┐             │                       │
-    │  VCC │───────────► │ 3V3                   │
-    │  GND │───────────► │ GND                   │
-    │  SDA │───────────► │ GPIO 21 (SDA)         │
-    │  SCL │───────────► │ GPIO 22 (SCL)         │
-    └──────┘             │                       │
-                        │        (I2C dùng chung)│
-      ENS160             │                       │
-    ┌──────┐             │                       │
-    │  VCC │───────────► │ 3V3                   │
-    │  GND │───────────► │ GND                   │
-    │  SDA │───────────► │ GPIO 21 (SDA)         │
-    │  SCL │───────────► │ GPIO 22 (SCL)         │
-    └──────┘             │                       │
-                        │                       │
-      LED trạng thái     │                       │
-    ┌──────┐             │                       │
-    │  A(+)│──[220Ω]───► │ GPIO 25               │
-    │  K(-)│───────────► │ GND                   │
-    └──────┘             │                       │
-                        │                       │
-      Buzzer (còi)       │                       │
-    ┌──────┐             │                       │
-    │  (+) │───────────► │ GPIO 26               │
-    │  (-) │───────────► │ GND                   │
-    └──────┘             │                       │
-                        │                       │
+                          ESP32 DevKit V1 (30 chân)
+                        ┌───────────────────────────┐
+                        │                           │
+  SHT31-D (I2C)         │                           │
+    ┌──────┐             │                           │
+    │  VCC │───────────► │ 3V3                       │
+    │  GND │───────────► │ GND                       │
+    │  SDA │───────────► │ GPIO 21 (SDA)  ┐           │
+    │  SCL │───────────► │ GPIO 22 (SCL)  │           │
+    └──────┘             │                │           │
+                        │                │  Bus I2C  │
+  Module ENS160+AHT21    │                │  dùng     │
+  (chỉ dùng ENS160)      │                │  chung    │
+    ┌──────┐             │                │  cho cả   │
+    │  VCC │───────────► │ 3V3            │  3 thiết  │
+    │  GND │───────────► │ GND            │  bị       │
+    │  SDA │───────────► │ GPIO 21 (SDA)  │           │
+    │  SCL │───────────► │ GPIO 22 (SCL)  │           │
+    └──────┘             │                │           │
+                        │                │           │
+  OLED SSD1306 (I2C,     │                │           │
+  bản 4 chân)            │                │           │
+    ┌──────┐             │                │           │
+    │  VCC │───────────► │ 3V3            │           │
+    │  GND │───────────► │ GND            │           │
+    │  SDA │───────────► │ GPIO 21 (SDA) ◄┘           │
+    │  SCL │───────────► │ GPIO 22 (SCL) ◄┘           │
+    └──────┘             │                           │
+                        │                           │
+      LED trạng thái     │                           │
+    ┌──────┐             │                           │
+    │  A(+)│──[220Ω]───► │ GPIO 25                   │
+    │  K(-)│───────────► │ GND                       │
+    └──────┘             │                           │
+                        │                           │
+      Buzzer (còi)       │                           │
+    ┌──────┐             │                           │
+    │  (+) │───────────► │ GPIO 26                   │
+    │  (-) │───────────► │ GND                       │
+    └──────┘             │                           │
+                        │                           │
       LED WiFi = LED onboard GPIO 2 (có sẵn trên board, không cần nối)
-                        └───────────────────────┘
+                        └───────────────────────────┘
 ```
 
 **Ghi chú quan trọng:**
-- OLED và ENS160 dùng chung bus I2C (SDA=GPIO21, SCL=GPIO22) — đấu song song hai cảm biến vào cùng 2 dây SDA/SCL.
-- Nếu ENS160 và OLED trùng địa chỉ I2C, kiểm tra lại địa chỉ bằng I2C scanner (ENS160 thường là `0x53`, một số module là `0x52`; code đã tự dò cả hai).
-- Với DHT22 nên thêm điện trở kéo lên (pull-up) 10kΩ giữa chân VCC và DATA nếu module không có sẵn.
-- Tất cả cảm biến dùng nguồn **3.3V** (không dùng 5V) vì ESP32 GPIO không chịu được 5V.
+- Cả 3 thiết bị (SHT31-D, module ENS160+AHT21, OLED) đấu **song song** vào chung 2 dây
+  SDA (GPIO 21) và SCL (GPIO 22) — đúng nguyên tắc bus I2C, không cần dây riêng cho
+  từng thiết bị.
+- Nếu OLED dùng bản 7 chân (có thêm RES/DC/CS cho SPI), chỉ nối 4 chân VCC/GND/SDA/SCL
+  và bỏ qua các chân còn lại — module này hỗ trợ cả hai chế độ nhưng firmware dùng chế độ I2C.
+- Địa chỉ I2C mặc định: SHT31-D là `0x44` (một số bản `0x45` nếu chân ADDR nối VCC),
+  ENS160 là `0x53` (một số bản `0x52`), OLED là `0x3C`. Code đã tự dò cả hai địa chỉ
+  cho SHT31-D và ENS160. Nên kiểm tra lại bằng I2C scanner nếu thiết bị không được nhận diện.
+- Không cần điện trở kéo lên (pull-up) rời cho SDA/SCL — hầu hết module I2C giá rẻ đã
+  có sẵn điện trở pull-up trên board; nếu bus dài hoặc đấu nhiều thiết bị mà không ổn định,
+  có thể thêm 1 cặp điện trở 4.7kΩ cho SDA/SCL.
+- Tất cả cảm biến dùng nguồn **3.3V** (không dùng 5V) vì ESP32 GPIO không chịu được 5V —
+  dù SHT31-D và OLED một số bản ghi hỗ trợ 3V-5V, nên ưu tiên cấp 3.3V để đồng nhất mức
+  logic I2C với ESP32.
 
 ---
 
-## 2. Danh sách thư viện cần cài
+## 3. Danh sách thư viện cần cài
 
 | Thư viện | Tác giả | Ghi chú |
 |---|---|---|
-| DHT sensor library | Adafruit | Đọc DHT22 |
-| Adafruit Unified Sensor | Adafruit | Phụ thuộc của DHT library |
+| Adafruit SHT31 Library | Adafruit | Đọc nhiệt độ/độ ẩm từ SHT31-D (I2C) |
+| Adafruit Unified Sensor | Adafruit | Phụ thuộc chung của các thư viện Adafruit |
 | Adafruit GFX Library | Adafruit | Vẽ đồ hoạ OLED |
 | Adafruit SSD1306 | Adafruit | Điều khiển màn hình OLED |
-| SparkFun Indoor Air Quality Sensor - ENS160 Arduino Library | SparkFun | Đọc TVOC/eCO2/AQI (cài qua link GitHub, xem lưu ý bên dưới) |
+| SparkFun Indoor Air Quality Sensor - ENS160 Arduino Library | SparkFun | Đọc TVOC/eCO2/AQI từ phần ENS160 trên module ENS160+AHT21 (cài qua link GitHub, xem lưu ý bên dưới) |
 | ESPAsyncWebServer | ESP32Async (fork mới) | Web server + WebSocket bất đồng bộ |
 | AsyncTCP | ESP32Async (fork mới) | Phụ thuộc bắt buộc của ESPAsyncWebServer |
 | ElegantOTA | ayushsharma82 | Cập nhật firmware qua web tại `/update` |
@@ -102,11 +131,11 @@ tải trực tiếp từ GitHub (`ESP32Async/ESPAsyncWebServer`, `ESP32Async/Asy
 **Sketch → Include Library → Add .ZIP Library**.
 
 Cần thêm plugin **ESP32 LittleFS Data Upload** để tải file trong thư mục `data/` lên ESP32
-(xem bước 4 bên dưới).
+(xem bước 5 bên dưới).
 
 ---
 
-## 3. Cấu trúc dự án
+## 4. Cấu trúc dự án
 
 ```
 khong_gian_xanh/
@@ -115,7 +144,7 @@ khong_gian_xanh/
 ├── src/                      # Toàn bộ mã nguồn C++ (PlatformIO build từ đây)
 │   ├── main.cpp              # Vòng lặp chính, điều phối các module
 │   ├── config.h               # Cấu hình chân, ngưỡng cảnh báo, hằng số
-│   ├── sensor.h / sensor.cpp   # Đọc DHT22 + ENS160, phân loại AQI, tự hồi phục lỗi
+│   ├── sensor.h / sensor.cpp   # Đọc SHT31-D + ENS160, phân loại AQI, tự hồi phục lỗi
 │   ├── display.h / display.cpp # Vẽ giao diện OLED SSD1306
 │   ├── wifi_manager.h/.cpp     # Quản lý WiFi STA/AP, lưu Preferences, tự reconnect
 │   ├── web_server.h/.cpp       # Web server, WebSocket, REST API, OTA
@@ -133,7 +162,7 @@ khong_gian_xanh/
 
 ---
 
-## 4. Hướng dẫn nạp code
+## 5. Hướng dẫn nạp code
 
 ### Cách A — PlatformIO (khuyến nghị)
 
@@ -201,7 +230,7 @@ cd esp32-android-toolkit
 
 ---
 
-## 5. Sử dụng lần đầu
+## 6. Sử dụng lần đầu
 
 1. Cấp nguồn cho ESP32. Vì chưa có WiFi lưu sẵn, thiết bị tự phát WiFi:
    - **SSID:** `KhongGianXanh-Setup`
@@ -211,7 +240,7 @@ cd esp32-android-toolkit
 4. ESP32 sẽ thử kết nối; nếu thành công, xem địa chỉ IP mới qua Serial Monitor và truy cập dashboard tại địa chỉ đó.
 5. Nếu không thành công sau ~15 giây, thiết bị tự quay lại chế độ AP để cấu hình lại.
 
-## 6. API tham khảo
+## 7. API tham khảo
 
 | Endpoint | Method | Mô tả |
 |---|---|---|
@@ -224,7 +253,7 @@ cd esp32-android-toolkit
 | `/update` | GET | Trang cập nhật firmware OTA (ElegantOTA) |
 | `/ws` | WebSocket | Đẩy dữ liệu realtime mỗi 2 giây |
 
-## 7. Tự động Build & Release (GitHub Actions)
+## 8. Tự động Build & Release (GitHub Actions)
 
 Mỗi khi push code lên nhánh `main` (trừ khi chỉ sửa file `.md`), GitHub Actions sẽ tự động:
 
@@ -263,7 +292,7 @@ Sửa dòng `FIRMWARE_VERSION` trong `src/config.h` trước khi push:
   ```
 - Trang OTA (`/update`) hiện chỉ hỗ trợ cập nhật firmware, chưa hỗ trợ cập nhật filesystem qua mạng.
 
-## 8. Ngưỡng cảnh báo mặc định (chỉnh trong `config.h`)
+## 9. Ngưỡng cảnh báo mặc định (chỉnh trong `config.h`)
 
 - Nhiệt độ > 35°C
 - Độ ẩm > 80%

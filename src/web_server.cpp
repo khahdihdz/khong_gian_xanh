@@ -19,13 +19,13 @@ static unsigned long s_lastCleanupMs = 0;
 // ------------------------------------------------------------
 static String buildDataJson(const SensorData& data, const String& wifiStatus, const String& timeStr) {
     String json = "{";
-    json += "\"temperature\":" + String(data.dhtOk ? data.temperature : -99, 1) + ",";
-    json += "\"humidity\":" + String(data.dhtOk ? data.humidity : -1, 1) + ",";
+    json += "\"temperature\":" + String(data.sht31Ok ? data.temperature : -99, 1) + ",";
+    json += "\"humidity\":" + String(data.sht31Ok ? data.humidity : -1, 1) + ",";
     json += "\"tvoc\":" + String(data.tvoc) + ",";
     json += "\"eco2\":" + String(data.eco2) + ",";
     json += "\"aqi\":" + String(data.aqi) + ",";
     json += "\"status\":\"" + data.aqiLabel + "\",";
-    json += "\"dht_ok\":" + String(data.dhtOk ? "true" : "false") + ",";
+    json += "\"sht31_ok\":" + String(data.sht31Ok ? "true" : "false") + ",";
     json += "\"ens160_ok\":" + String(data.ens160Ok ? "true" : "false") + ",";
     json += "\"warning\":" + String(data.warning ? "true" : "false") + ",";
     json += "\"warning_reason\":\"" + data.warningReason + "\",";

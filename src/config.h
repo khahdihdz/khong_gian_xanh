@@ -13,16 +13,22 @@
 //  CẤU HÌNH CHÂN (PIN) - ESP32 DevKit V1 (30 chân)
 // ============================================================
 
-// --- DHT22 (Nhiệt độ / Độ ẩm) ---
-#define DHT_PIN         4
-#define DHT_TYPE        DHT22
-
-// --- I2C dùng chung cho OLED SSD1306 và ENS160 ---
+// --- I2C dùng chung cho OLED, SHT31-D và module ENS160+AHT21 ---
+// Toàn bộ cảm biến trong bản thiết kế này đều giao tiếp qua I2C
+// (không còn chân data rời như DHT22 kiểu cũ).
 #define I2C_SDA_PIN     21
 #define I2C_SCL_PIN     22
+
 #define OLED_ADDRESS    0x3C
 #define OLED_WIDTH      128
 #define OLED_HEIGHT     64
+
+// --- SHT31-D (Nhiệt độ / Độ ẩm, I2C) ---
+#define SHT31_ADDRESS   0x44   // Một số module dùng 0x45 nếu chân ADDR nối VCC, tự dò trong sensor.cpp
+
+// --- Module ENS160 + AHT21 (chất lượng không khí) ---
+// Chỉ dùng phần ENS160 (TVOC/eCO2/AQI); AHT21 tích hợp sẵn trên module
+// không được đọc vì nhiệt độ/độ ẩm đã lấy từ SHT31-D chính xác hơn.
 #define ENS160_ADDRESS  0x53   // Một số board dùng 0x52, tự dò trong sensor.cpp
 
 // --- LED trạng thái & Buzzer ---
