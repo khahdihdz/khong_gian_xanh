@@ -2,9 +2,17 @@
 
 ### Hệ thống ESP32 giám sát môi trường phòng thời gian thực
 
-Hệ thống theo dõi nhiệt độ, độ ẩm và chất lượng không khí trong phòng,
-hiển thị trên màn hình OLED và Web Dashboard realtime (WebSocket),
-kèm cảnh báo LED/Buzzer, lưu lịch sử, xuất CSV, và cập nhật firmware OTA.
+**Không Gian Xanh** là firmware ESP32 mã nguồn mở giúp theo dõi nhiệt độ, độ ẩm và
+chất lượng không khí trong phòng theo thời gian thực.
+
+**Tính năng chính:**
+- 📟 Hiển thị trực tiếp trên màn hình OLED
+- 🌐 Web Dashboard realtime qua WebSocket, xem trên điện thoại/máy tính trong cùng mạng
+- 🚨 Cảnh báo bằng LED + Buzzer khi vượt ngưỡng nhiệt độ/độ ẩm/AQI
+- 📊 Lưu lịch sử (ring-buffer 1000 bản ghi), xuất CSV
+- 📶 Tự cấu hình WiFi qua chế độ AP, tự kết nối lại khi mất mạng
+- 🔄 Cập nhật firmware qua mạng (OTA) không cần cắm dây
+- ⚙️ Tự động build & phát hành firmware qua GitHub Actions
 
 💛 Dashboard có nút **"Ủng hộ"** liên kết tới [khahdihdz.github.io](https://khahdihdz.github.io) nếu bạn muốn ủng hộ tác giả.
 
@@ -21,13 +29,10 @@ kèm cảnh báo LED/Buzzer, lưu lịch sử, xuất CSV, và cập nhật firm
 | LED đơn (5mm) + điện trở 220Ω | Cảnh báo trực quan | GPIO |
 | Buzzer thụ động/chủ động 5V hoặc 3.3V | Cảnh báo âm thanh | GPIO |
 
-> So với bản thiết kế cũ dùng **DHT22** (giao tiếp 1 dây) và **ENS160** rời, bản này
-> chuyển hoàn toàn sang cảm biến **I2C**: DHT22 → **SHT31-D** (I2C, chính xác hơn,
-> không cần điện trở kéo lên), và ENS160 rời → **module ENS160+AHT21** (vẫn chỉ đọc
-> phần ENS160 cho AQI/TVOC/eCO2; chip AHT21 tích hợp sẵn trên module này không được
-> dùng tới vì nhiệt độ/độ ẩm đã lấy từ SHT31-D). Ưu điểm: cả 3 thiết bị cảm biến +
-> màn hình đều dùng chung 2 dây SDA/SCL, dây nối gọn hơn, không còn lo timing 1-wire
-> của DHT22.
+> Toàn bộ cảm biến đều dùng chuẩn **I2C**, dùng chung 2 dây SDA/SCL — không còn cảm
+> biến giao tiếp 1 dây (như DHT22 kiểu cũ) nên dây nối gọn hơn và không phải lo timing
+> đọc dữ liệu. Module ENS160+AHT21 chỉ dùng phần ENS160 cho AQI/TVOC/eCO2, còn AHT21
+> tích hợp sẵn trên module đó không được đọc vì nhiệt độ/độ ẩm đã lấy từ SHT31-D.
 
 ## 2. Sơ đồ nối dây
 
@@ -125,7 +130,7 @@ kèm cảnh báo LED/Buzzer, lưu lịch sử, xuất CSV, và cập nhật firm
 Đã khai báo sẵn trong `platformio.ini`, chỉ cần build là PlatformIO tự tải thư viện.
 
 ### Cài bằng Arduino IDE
-Mở **Sketch → Include Library → Manage Libraries**, tìm và cài từng thư viện theo tên ở bảng trên.
+M�� **Sketch → Include Library → Manage Libraries**, tìm và cài từng thư viện theo tên ở bảng trên.
 Với ESPAsyncWebServer/AsyncTCP, nếu không tìm thấy bản đúng trên Library Manager,
 tải trực tiếp từ GitHub (`ESP32Async/ESPAsyncWebServer`, `ESP32Async/AsyncTCP`) rồi
 **Sketch → Include Library → Add .ZIP Library**.
@@ -200,20 +205,20 @@ gõ thêm lệnh nào khác.
 > vẫn phụ thuộc `pyserial` để dò cổng USB — trên một số máy/bản Android việc này
 > không ổn định. Nếu gặp lỗi không nhận thiết bị, dùng **Cách D** bên dưới.
 
-### Cách D — esp32-android-toolkit (khuyến nghị cho Android, không cần build trên máy)
+### Cách D — esp32-toolkit (khuyến nghị cho Android, không cần build trên máy)
 
-`esp32-android-toolkit` là **một repo riêng biệt**, không nằm trong repo này — cần clone
-hoặc tải về máy/điện thoại độc lập. Nó nạp firmware đã build sẵn (từ GitHub Release
-của repo `khong_gian_xanh` này) thông qua Android USB Host API trực tiếp, không qua
-`pyserial` nên ổn định hơn trên Android.
+[`esp32-toolkit`](https://github.com/khahdihdz/esp32-toolkit) là **một repo riêng biệt**,
+không nằm trong repo này — cần clone hoặc tải về máy/điện thoại độc lập. Nó nạp firmware
+đã build sẵn (từ GitHub Release của repo `khong_gian_xanh` này) thông qua Android USB Host
+API trực tiếp, không qua `pyserial` nên ổn định hơn trên Android.
 
 ```bash
 # 1. Clone repo toolkit về (nếu chưa có), lần này ở ngoài repo khong_gian_xanh
-git clone <link-repo-esp32-android-toolkit-của-bạn>
-cd esp32-android-toolkit
+git clone https://github.com/khahdihdz/esp32-toolkit.git
+cd esp32-toolkit
 
 # 2. Tải file khong-gian-xanh-toolkit-vX.Y.Z.zip từ trang Release của repo khong_gian_xanh
-# 3. Giải nén, chép thư mục firmware/ bên trong đè vào firmware/ của esp32-android-toolkit
+# 3. Giải nén, chép thư mục firmware/ bên trong đè vào firmware/ của esp32-toolkit
 ./flash.sh
 ```
 
@@ -255,7 +260,7 @@ cd esp32-android-toolkit
 
 ## 8. Tự động Build & Release (GitHub Actions)
 
-Mỗi khi push code lên nhánh `main` (trừ khi chỉ sửa file `.md`), GitHub Actions sẽ tự động:
+M��i khi push code lên nhánh `main` (trừ khi chỉ sửa file `.md`), GitHub Actions sẽ tự động:
 
 1. Build firmware bằng PlatformIO (`pio run`).
 2. Build ảnh hệ thống file LittleFS chứa giao diện web (`pio run -t buildfs`).
