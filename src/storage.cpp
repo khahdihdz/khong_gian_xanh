@@ -57,7 +57,11 @@ String storageGetHistoryJson(uint8_t hoursFilter) {
     time(&now);
     uint32_t cutoff = 0;
     if (hoursFilter > 0) {
-        cutoff = (uint32_t)now - (uint32_t)hoursFilter * 3600UL;
+        // Tranh underflow (uint32_t) khi chua dong bo NTP (now con nho,
+        // vd = 0 luc moi boot) - neu khong se ra so RAT LON, loai bo
+        // toan bo lich su thay vi hien thi day du nhu mong doi.
+        uint32_t windowSec = (uint32_t)hoursFilter * 3600UL;
+        cutoff = ((uint32_t)now > windowSec) ? ((uint32_t)now - windowSec) : 0;
     }
 
     size_t start = oldestIndex();
