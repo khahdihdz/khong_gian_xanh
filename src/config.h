@@ -43,6 +43,7 @@
 #define DISPLAY_UPDATE_INTERVAL_MS  2000    // Cập nhật OLED mỗi 2 giây
 #define WEBSOCKET_PUSH_INTERVAL_MS  2000    // Đẩy dữ liệu realtime qua WebSocket
 #define WIFI_RECONNECT_INTERVAL_MS  10000   // Thử kết nối lại WiFi mỗi 10 giây
+#define AP_GRACE_AFTER_CONNECT_MS   120000UL // Giữ AP thêm 2 phút sau khi kết nối STA thành công (đủ thời gian để trang cấu hình đọc IP mới)
 #define SENSOR_ERROR_RETRY_MS       5000    // Thử khởi tạo lại cảm biến lỗi mỗi 5 giây
 #define BLINK_INTERVAL_MS           300     // Nhấp nháy LED cảnh báo
 #define NTP_SYNC_INTERVAL_MS        3600000UL // Đồng bộ lại NTP mỗi 1 giờ

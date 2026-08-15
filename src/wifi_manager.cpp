@@ -10,6 +10,7 @@ static unsigned long s_lastAttemptMs = 0;
 static String s_savedSsid;
 static String s_savedPass;
 static bool s_apModeActive = false;
+static unsigned long s_connectedAtMs = 0;
 
 // ------------------------------------------------------------
 static void startAPMode() {
@@ -29,7 +30,12 @@ static void tryConnectSTA() {
         startAPMode();
         return;
     }
-    WiFi.mode(WIFI_STA);
+    // Nếu AP đang phát (vd. người dùng vừa lưu WiFi từ trang cấu hình khi đang
+    // nối vào AP KhongGianXanh-Setup), giữ AP sống song song trong lúc thử kết
+    // nối STA, để trang cấu hình có thể tiếp tục hỏi /api/info qua AP và hiển
+    // thị địa chỉ IP mới ngay khi kết nối thành công, thay vì mất kết nối ngay
+    // lập tức.
+    WiFi.mode(s_apModeActive ? WIFI_AP_STA : WIFI_STA);
     WiFi.begin(s_savedSsid.c_str(), s_savedPass.c_str());
     s_state = WIFI_STATE_CONNECTING;
     s_lastAttemptMs = millis();
@@ -60,10 +66,12 @@ void wifiManagerLoop() {
     if (s_state == WIFI_STATE_CONNECTING) {
         if (WiFi.status() == WL_CONNECTED) {
             s_state = WIFI_STATE_CONNECTED;
-            s_apModeActive = false;
+            s_connectedAtMs = now;
             digitalWrite(LED_WIFI_PIN, HIGH);
             Serial.print("[WIFI] Đã kết nối. IP: ");
             Serial.println(WiFi.localIP());
+            // Không tắt AP ngay (nếu đang giữ song song) - để trang cấu hình
+            // còn kịp đọc IP mới; AP sẽ tự tắt sau AP_GRACE_AFTER_CONNECT_MS.
         } else if (now - s_lastAttemptMs > 15000UL) {
             // Quá 15s không kết nối được -> chuyển sang AP mode để người dùng cấu hình lại
             Serial.println("[WIFI] Kết nối thất bại, chuyển sang chế độ AP.");
@@ -74,7 +82,15 @@ void wifiManagerLoop() {
         if (WiFi.status() != WL_CONNECTED) {
             Serial.println("[WIFI] Mất kết nối, sẽ thử lại...");
             s_state = WIFI_STATE_DISCONNECTED;
+            s_apModeActive = false;
             s_lastAttemptMs = now;
+        } else if (s_apModeActive && now - s_connectedAtMs >= AP_GRACE_AFTER_CONNECT_MS) {
+            // Đã kết nối ổn định và đủ thời gian để trang cấu hình đọc được
+            // IP mới -> tắt AP để giải phóng tài nguyên / giảm nhiễu sóng.
+            WiFi.softAPdisconnect(true);
+            WiFi.mode(WIFI_STA);
+            s_apModeActive = false;
+            Serial.println("[WIFI] Đã tắt chế độ AP sau khi kết nối ổn định.");
         }
     } else if (s_state == WIFI_STATE_DISCONNECTED) {
         digitalWrite(LED_WIFI_PIN, LOW);
