@@ -1,0 +1,31 @@
+{
+  "name": "Không Gian Xanh — Giám sát môi trường phòng",
+  "short_name": "Không Gian Xanh",
+  "description": "Theo dõi nhiệt độ, độ ẩm và chất lượng không khí trong phòng theo thời gian thực.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0c130c",
+  "theme_color": "#0c130c",
+  "lang": "vi",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Chức năng",
+      "short_name": "Chức năng",
+      "url": "/tools.html",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Cấu hình WiFi",
+      "short_name": "WiFi",
+      "url": "/wifi_config.html",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
