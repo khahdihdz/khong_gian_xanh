@@ -1,2 +1,90 @@
-<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chức năng — Không Gian Xanh</title><style>:root{--bg:#0c130c;--p:#182016;--p2:#1e2a1a;--l:#31432c;--t:#f5f8ee;--m:#a7b69c;--g:#4ade80;--r:#f87171;--a:#fbbf24}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:14px system-ui,sans-serif}.bar{padding:16px 20px;border-bottom:1px solid var(--l);display:flex;justify-content:space-between}.wrap{max-width:980px;margin:auto;padding:20px}.btn{border:1px solid var(--l);background:var(--p);color:var(--t);padding:9px 14px;border-radius:10px;cursor:pointer;text-decoration:none}.primary{background:var(--g);color:#071007;border:0;font-weight:700}.panel{background:var(--p);border:1px solid var(--l);border-radius:16px;padding:18px;margin:16px 0}.grid{display:grid;grid-template-columns:2fr 1fr;gap:12px}.field{margin:10px 0}.field label{display:block;color:var(--m);font-size:12px;margin-bottom:5px}.field input,.field textarea{width:100%;padding:10px;border-radius:9px;border:1px solid var(--l);background:var(--p2);color:var(--t);font:inherit}.field textarea{min-height:130px;font-family:monospace;font-size:11px}.status{margin:12px 0;color:var(--m)}.ok{color:var(--g)}.err{color:var(--r)}.badge{padding:5px 10px;border-radius:99px;background:var(--p2);color:var(--m)}.online{color:var(--g);border:1px solid var(--g)}.switch{display:flex;gap:9px;align-items:center;margin:12px 0}.row{display:flex;justify-content:space-between;border-bottom:1px solid var(--l);padding:9px 0}.mono{font-family:monospace;word-break:break-all}small{color:var(--m)}@media(max-width:600px){.grid{grid-template-columns:1fr}.wrap{padding:14px}}
-</style></head><body><div class="bar"><b>🌿 Không Gian Xanh</b><a class="btn" href="/">← Dashboard</a></div><main class="wrap"><h2>⚙️ Chức năng</h2><div class="panel"><h3>📡 MQTT / MQTT TLS</h3><div style="display:flex;justify-content:space-between;gap:10px"><small>Kết nối Broker, telemetry QoS 1 và điều khiển từ xa</small><span id="badge" class="badge">Đang kiểm tra</span></div><label class="switch"><input id="on" type="checkbox"> Bật MQTT</label><label class="switch"><input id="tls" type="checkbox" checked> Bật TLS và xác thực CA</label><div class="grid"><div class="field"><label>Broker</label><input id="host" placeholder="mqtt.example.com"></div><div class="field"><label>Port</label><input id="port" type="number" value="8883" min="1" max="65535"></div></div><div class="grid"><div class="field"><label>Username</label><input id="user" autocomplete="username"></div><div class="field"><label>Password</label><input id="pass" type="password" placeholder="Để trống để giữ mật khẩu cũ"></div></div><div class="field"><label>CA Certificate (PEM) — bắt buộc khi bật TLS</label><textarea id="ca" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea></div><button id="save" class="btn primary">💾 Lưu & kết nối ngay</button> <button id="refresh" class="btn">🔄 Kiểm tra</button><div id="status" class="status">Đang tải...</div><div class="row"><span>Device ID</span><span id="device" class="mono">--</span></div><div class="row"><span>Telemetry</span><span class="mono">khonggianxanh/{device_id}/telemetry</span></div><div class="row"><span>Command</span><span class="mono">khonggianxanh/{device_id}/command</span></div><div class="row"><span>QoS</span><span>1</span></div></div><div class="panel"><h3>☁️ Cloud HTTP</h3><small>Giữ HTTP relay hiện tại để tương thích ngược.</small><label class="switch"><input id="cloudOn" type="checkbox"> Bật Cloud</label><div class="field"><label>URL relay</label><input id="cloudUrl"></div><div class="field"><label>Token</label><input id="cloudToken" type="password"></div><button id="cloudSave" class="btn primary">Lưu Cloud</button><div id="cloudStatus" class="status"></div></div><div class="panel"><h3>ℹ️ Thiết bị</h3><div class="row"><span>Firmware</span><span id="fw">--</span></div><div class="row"><span>IP</span><span id="ip">--</span></div><div class="row"><span>RSSI</span><span id="rssi">--</span></div><div class="row"><span>Heap</span><span id="heap">--</span></div></div></main><script>const $=x=>document.getElementById(x);function msg(t,ok=true){$('status').textContent=t;$('status').className='status '+(ok?'ok':'err')}async function mqtt(){try{let d=await(await fetch('/api/mqtt-config',{cache:'no-store'})).json();$('on').checked=!!d.enabled;$('tls').checked=d.tls!==false;$('host').value=d.host||'';$('port').value=d.port||($('tls').checked?8883:1883);$('user').value=d.username||'';$('pass').value='';$('ca').value='';$('device').textContent=d.device_id||'--';$('status').textContent=d.status||'';$('badge').textContent=d.connected?'🟢 Đã kết nối':'⚪ Chưa kết nối';$('badge').className='badge '+(d.connected?'online':'')}catch(e){msg('❌ Không đọc được MQTT',false)}}$('tls').onchange=()=>{$('port').value=$('tls').checked?8883:1883};$('refresh').onclick=mqtt;$('save').onclick=async()=>{let host=$('host').value.trim(),port=Number($('port').value)||0;if(!host)return msg('⚠️ Nhập Broker',false);if(!port||port>65535)return msg('⚠️ Port không hợp lệ',false);if($('tls').checked&&!$('ca').value.trim())return msg('⚠️ TLS yêu cầu CA certificate PEM',false);let b=new URLSearchParams({enabled:$('on').checked?'1':'0',tls:$('tls').checked?'1':'0',host,port:String(port),username:$('user').value.trim(),password:$('pass').value,ca:$('ca').value});msg('Đang lưu và kết nối...');try{let d=await(await fetch('/api/mqtt-config',{method:'POST',body:b})).json();msg((d.ok?'✅ ':'❌ ')+(d.message||''),!!d.ok);setTimeout(mqtt,1500)}catch(e){msg('❌ Lỗi kết nối API',false)}};mqtt();setInterval(mqtt,5000);async function cloud(){try{let d=await(await fetch('/api/cloud-config',{cache:'no-store'})).json();$('cloudOn').checked=!!d.enabled;$('cloudUrl').value=d.url||'';$('cloudToken').value='';$('cloudToken').placeholder=d.has_token?'Đã có token — để trống nếu giữ nguyên':'Token'}}catch(e){}}$('cloudSave').onclick=async()=>{let b=new URLSearchParams({enabled:$('cloudOn').checked?'1':'0',url:$('cloudUrl').value.trim(),token:$('cloudToken').value});let d=await(await fetch('/api/cloud-config',{method:'POST',body:b})).json();$('cloudStatus').textContent=(d.ok?'✅ ':'❌ ')+(d.message||'');cloud()};cloud();async function info(){try{let d=await(await fetch('/api/info',{cache:'no-store'})).json();$('fw').textContent=d.firmware_version||'--';$('ip').textContent=d.ip||'--';$('rssi').textContent=(d.rssi??'--')+' dBm';$('heap').textContent=d.free_heap?Math.round(d.free_heap/1024)+' KB':'--'}catch(e){}}info();setInterval(info,10000)</script></body></html>
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chức năng — Không Gian Xanh</title>
+<style>
+:root{--bg:#0c130c;--p:#182016;--p2:#1e2a1a;--l:#31432c;--t:#f5f8ee;--m:#a7b69c;--g:#4ade80;--r:#f87171;--a:#fbbf24}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:14px system-ui,sans-serif}.bar{padding:16px 20px;border-bottom:1px solid var(--l);display:flex;justify-content:space-between}.wrap{max-width:980px;margin:auto;padding:20px}.btn{border:1px solid var(--l);background:var(--p);color:var(--t);padding:9px 14px;border-radius:10px;cursor:pointer}.primary{background:var(--g);color:#071007;border:0;font-weight:700}.panel{background:var(--p);border:1px solid var(--l);border-radius:16px;padding:18px;margin:16px 0}.grid{display:grid;grid-template-columns:2fr 1fr;gap:12px}.field{margin:10px 0}.field label{display:block;color:var(--m);font-size:12px;margin-bottom:5px}.field input,.field textarea{width:100%;padding:10px;border-radius:9px;border:1px solid var(--l);background:var(--p2);color:var(--t);font:inherit}.field textarea{min-height:130px;font-family:monospace;font-size:11px}.status{margin:12px 0;color:var(--m);line-height:1.5}.ok{color:var(--g)}.err{color:var(--r)}.warn{color:var(--a)}.badge{padding:5px 10px;border-radius:99px;background:var(--p2);color:var(--m)}.online{color:var(--g);border:1px solid var(--g)}.switch{display:flex;gap:9px;align-items:center;margin:12px 0}.row{display:flex;justify-content:space-between;gap:15px;border-bottom:1px solid var(--l);padding:9px 0}.mono{font-family:monospace;word-break:break-all}small{color:var(--m)}button:disabled{opacity:.55;cursor:not-allowed}@media(max-width:600px){.grid{grid-template-columns:1fr}.wrap{padding:14px}.bar{padding:14px}.row{flex-direction:column;gap:4px}}
+</style>
+</head>
+<body>
+<div class="bar"><b>🌿 Không Gian Xanh</b><a class="btn" href="/">← Dashboard</a></div>
+<main class="wrap">
+<h2>⚙️ Chức năng</h2>
+<div class="panel">
+<h3>📡 MQTT / MQTT TLS</h3>
+<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><small>Kết nối HiveMQ, telemetry QoS 1 và điều khiển từ xa</small><span id="badge" class="badge">Đang kiểm tra</span></div>
+<label class="switch"><input id="on" type="checkbox"> Bật MQTT</label>
+<label class="switch"><input id="tls" type="checkbox" checked> Bật TLS và xác thực CA</label>
+<div class="grid"><div class="field"><label>Broker</label><input id="host" placeholder="xxxxx.s1.eu.hivemq.cloud"></div><div class="field"><label>Port</label><input id="port" type="number" value="8883" min="1" max="65535"></div></div>
+<div class="grid"><div class="field"><label>Username</label><input id="user" autocomplete="username"></div><div class="field"><label>Password</label><input id="pass" type="password" placeholder="Để trống để giữ mật khẩu đã lưu"></div></div>
+<div class="field"><label>CA Certificate (PEM)</label><textarea id="ca" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea><small id="caInfo">Chưa kiểm tra CA.</small></div>
+<button id="save" class="btn primary">🔌 Lưu & Kết nối MQTT</button>
+<button id="refresh" class="btn">🔄 Kiểm tra trạng thái</button>
+<div id="status" class="status">Đang tải...</div>
+<div class="row"><span>Device ID</span><span id="device" class="mono">--</span></div>
+<div class="row"><span>Telemetry</span><span class="mono">khonggianxanh/{device_id}/telemetry</span></div>
+<div class="row"><span>Command</span><span class="mono">khonggianxanh/{device_id}/command</span></div>
+<div class="row"><span>QoS</span><span>1</span></div>
+</div>
+
+<div class="panel">
+<h3>☁️ Cloud HTTP</h3><small>Giữ HTTP relay hiện tại để tương thích ngược.</small>
+<label class="switch"><input id="cloudOn" type="checkbox"> Bật Cloud</label>
+<div class="field"><label>URL relay</label><input id="cloudUrl"></div>
+<div class="field"><label>Token</label><input id="cloudToken" type="password"></div>
+<button id="cloudSave" class="btn primary">Lưu Cloud</button><div id="cloudStatus" class="status"></div>
+</div>
+
+<div class="panel">
+<h3>ℹ️ Thiết bị</h3>
+<div class="row"><span>Firmware</span><span id="fw">--</span></div>
+<div class="row"><span>IP</span><span id="ip">--</span></div>
+<div class="row"><span>RSSI</span><span id="rssi">--</span></div>
+<div class="row"><span>Heap</span><span id="heap">--</span></div>
+</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let pollTimer=null;
+function setStatus(text,type=''){ $('status').textContent=text; $('status').className='status '+type; }
+function setBadge(connected,status){ $('badge').textContent=connected?'🟢 MQTT đã kết nối':'⚪ MQTT chưa kết nối'; $('badge').className='badge '+(connected?'online':''); if(status) setStatus(status,connected?'ok':'warn'); }
+async function mqtt(showError=true){
+  try{
+    const r=await fetch('/api/mqtt-config',{cache:'no-store'}); const d=await r.json();
+    $('on').checked=!!d.enabled; $('tls').checked=d.tls!==false; $('host').value=d.host||''; $('port').value=d.port||($('tls').checked?8883:1883); $('user').value=d.username||''; $('pass').value=''; $('device').textContent=d.device_id||'--';
+    if(d.has_ca){ $('caInfo').textContent='✅ CA certificate đã được lưu trên ESP32 — để trống ô CA để giữ nguyên.'; $('caInfo').className='ok'; }
+    else { $('caInfo').textContent='⚠️ Chưa có CA certificate.'; $('caInfo').className='warn'; }
+    setBadge(!!d.connected,d.status||''); return d;
+  }catch(e){ if(showError) setStatus('❌ Không đọc được trạng thái MQTT API: '+e.message,'err'); return null; }
+}
+function startPolling(){ clearInterval(pollTimer); let n=0; pollTimer=setInterval(async()=>{n++; const d=await mqtt(false); if(d&&d.connected){clearInterval(pollTimer);setStatus('✅ Kết nối MQTT thành công.','ok');} else if(n>=15){clearInterval(pollTimer); if(d) setStatus('⚠️ Đã lưu cấu hình nhưng chưa kết nối. Xem mã lỗi MQTT và kiểm tra WiFi, Host, tài khoản và CA.','warn');}},1000); }
+$('tls').onchange=()=>{ $('port').value=$('tls').checked?8883:1883; };
+$('refresh').onclick=()=>mqtt(true);
+$('save').onclick=async()=>{
+  const host=$('host').value.trim(), port=Number($('port').value)||0, tls=$('tls').checked, enabled=$('on').checked;
+  if(!host) return setStatus('⚠️ Nhập MQTT Broker.','err');
+  if(!port||port>65535) return setStatus('⚠️ Port không hợp lệ.','err');
+  const ca=$('ca').value.trim();
+  if(tls&&!ca){
+    const current=await mqtt(false);
+    if(!current||!current.has_ca) return setStatus('⚠️ TLS cần CA certificate PEM. Hãy dán CA vào ô bên trên rồi lưu.','err');
+  }
+  const b=new URLSearchParams({enabled:enabled?'1':'0',tls:tls?'1':'0',host,port:String(port),username:$('user').value.trim(),password:$('pass').value,ca});
+  $('save').disabled=true; setStatus('⏳ Đang lưu cấu hình và bắt đầu kết nối...');
+  try{
+    const r=await fetch('/api/mqtt-config',{method:'POST',body:b}); const d=await r.json();
+    if(!d.ok){setStatus('❌ '+(d.message||'Không lưu được cấu hình.'),'err');return;}
+    setStatus('⏳ Cấu hình đã lưu. Đang chờ HiveMQ xác nhận kết nối...'); startPolling();
+  }catch(e){setStatus('❌ Lỗi gọi API: '+e.message,'err');}
+  finally{$('save').disabled=false;}
+};
+async function cloud(){try{const d=await(await fetch('/api/cloud-config',{cache:'no-store'})).json();$('cloudOn').checked=!!d.enabled;$('cloudUrl').value=d.url||'';$('cloudToken').value='';$('cloudToken').placeholder=d.has_token?'Đã có token — để trống nếu giữ nguyên':'Token';}catch(e){}}
+$('cloudSave').onclick=async()=>{try{const b=new URLSearchParams({enabled:$('cloudOn').checked?'1':'0',url:$('cloudUrl').value.trim(),token:$('cloudToken').value});const d=await(await fetch('/api/cloud-config',{method:'POST',body:b})).json();$('cloudStatus').textContent=(d.ok?'✅ ':'❌ ')+(d.message||'');cloud();}catch(e){$('cloudStatus').textContent='❌ '+e.message;}};
+async function info(){try{const d=await(await fetch('/api/info',{cache:'no-store'})).json();$('fw').textContent=d.firmware_version||'--';$('ip').textContent=d.ip||'--';$('rssi').textContent=(d.rssi??'--')+' dBm';$('heap').textContent=d.free_heap?Math.round(d.free_heap/1024)+' KB':'--';}catch(e){}}
+mqtt();cloud();info();setInterval(()=>mqtt(false),5000);setInterval(info,10000);
+</script>
+</body>
+</html>
