@@ -12,31 +12,48 @@
 <main class="wrap">
 <div class="panel"><h3>📡 Kết nối MQTT</h3><small>Dashboard chạy trực tiếp trên Cloudflare Pages và kết nối Broker bằng MQTT over WebSocket.</small>
 <div class="grid"><div class="field"><label>WebSocket Broker</label><input id="host" placeholder="broker.example.com"></div><div class="field"><label>Port WebSocket TLS</label><input id="port" type="number" value="8884"></div></div>
-<div class="grid"><div class="field"><label>Username</label><input id="user" autocomplete="username" autocapitalize="none" spellcheck="false"></div><div class="field"><label>Password</label><input id="pass" type="password" autocomplete="new-password"></div></div>
+<div class="grid"><div class="field"><label>Username</label><input id="user" autocomplete="username" autocapitalize="none" spellcheck="false"></div><div class="field"><label>Password</label><input id="pass" type="password" autocomplete="current-password"></div></div>
 <div class="field"><label>Device ID</label><input id="device" placeholder="esp32-xxxxxxxx"></div>
 <button id="connect" class="btn primary">🔌 Kết nối</button> <button id="disconnect" class="btn danger">⏏ Ngắt kết nối</button>
 <div id="status" class="status">Chưa kết nối.</div></div>
-
 <div class="panel"><h3>🌡️ Dữ liệu thiết bị</h3><div class="cards">
-<div class="card"><div class="label">Nhiệt độ</div><div id="temp" class="value">--</div></div>
-<div class="card"><div class="label">Độ ẩm</div><div id="hum" class="value">--</div></div>
-<div class="card"><div class="label">TVOC</div><div id="tvoc" class="value">--</div></div>
-<div class="card"><div class="label">eCO2</div><div id="eco2" class="value">--</div></div>
+<div class="card"><div class="label">Nhiệt độ</div><div id="temp" class="value">--</div></div><div class="card"><div class="label">Độ ẩm</div><div id="hum" class="value">--</div></div><div class="card"><div class="label">TVOC</div><div id="tvoc" class="value">--</div></div><div class="card"><div class="label">eCO2</div><div id="eco2" class="value">--</div></div>
 </div><div class="row"><span>Chất lượng không khí</span><b id="aqi">--</b></div><div class="row"><span>Trạng thái thiết bị</span><b id="devStatus">--</b></div><div class="row"><span>Cập nhật lần cuối</span><span id="last">--</span></div></div>
-
 <div class="panel"><h3>🧪 MQTT</h3><div class="row"><span>Telemetry</span><span id="telemetry" class="mono">--</span></div><div class="row"><span>Status</span><span id="statusTopic" class="mono">--</span></div><div class="row"><span>QoS</span><span>1</span></div><div class="row"><span>Retained status</span><span>Có</span></div></div>
-
-<div class="panel"><h3>⚠️ Lưu ý riêng tư</h3><small>Thông tin MQTT được lưu trong trình duyệt bằng localStorage. Vì đây là dashboard cá nhân, chỉ mở trang này trên thiết bị tin cậy. Không đưa mật khẩu MQTT vào mã nguồn GitHub.</small></div>
+<div class="panel"><h3>⚠️ Lưu ý riêng tư</h3><small>Broker, port, username và Device ID được lưu trong trình duyệt để tự kết nối lại sau refresh. Mật khẩu MQTT không được ghi vào GitHub.</small></div>
 </main>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <script>
-const $=id=>document.getElementById(id);const LS='kgx_mqtt_personal';let client=null;
-function load(){try{const d=JSON.parse(localStorage.getItem(LS)||'{}');for(const k of ['host','port','user','device'])if(d[k])$(k).value=d[k]}catch(e){}}
-function save(){localStorage.setItem(LS,JSON.stringify({host:$('host').value.trim(),port:$('port').value.trim(),user:$('user').value.trim(),device:$('device').value.trim()}))}
+const $=id=>document.getElementById(id);
+const LS='kgx_mqtt_personal_v2';
+const SESSION='kgx_mqtt_password_session';
+let client=null,manualDisconnect=false,reconnectTimer=null;
+function load(){try{const d=JSON.parse(localStorage.getItem(LS)||'{}');for(const k of ['host','port','user','device'])if(d[k]!=null)$(k).value=d[k];const p=sessionStorage.getItem(SESSION);if(p)$('pass').value=p}catch(e){console.warn(e)}}
+function save(){localStorage.setItem(LS,JSON.stringify({host:$('host').value.trim(),port:$('port').value.trim()||'8884',user:$('user').value.trim(),device:$('device').value.trim()}));if($('pass').value)sessionStorage.setItem(SESSION,$('pass').value)}
 function setStatus(t,c=''){$('status').textContent=t;$('status').className='status '+c}
 function badge(on){$('badge').textContent=on?'🟢 Đã kết nối':'⚪ Chưa kết nối';$('badge').className='badge '+(on?'online':'')}
 function topics(){const d=$('device').value.trim();if(!d)return null;return{telemetry:`khonggianxanh/${d}/telemetry`,status:`khonggianxanh/${d}/status`}}
-$('connect').onclick=()=>{const host=$('host').value.trim(),port=Number($('port').value)||8884,user=$('user').value,pass=$('pass').value;if(!host)return setStatus('⚠️ Nhập WebSocket Broker.','warn');const t=topics();if(!t)return setStatus('⚠️ Nhập Device ID.','warn');if(client)client.end(true);save();setStatus('⏳ Đang kết nối MQTT over WebSocket...');client=mqtt.connect(`wss://${host}:${port}/mqtt`,{username:user,password:pass,clientId:'kgx-web-'+Math.random().toString(16).slice(2),clean:true,connectTimeout:8000,reconnectPeriod:3000});client.on('connect',()=>{badge(true);setStatus('✅ MQTT WebSocket đã kết nối.','ok');client.subscribe([t.telemetry,t.status],{qos:1},e=>{if(e)setStatus('⚠️ Kết nối được nhưng subscribe lỗi: '+e.message,'warn')});$('telemetry').textContent=t.telemetry;$('statusTopic').textContent=t.status});client.on('reconnect',()=>setStatus('⏳ MQTT đang kết nối lại...'));client.on('error',e=>{badge(false);setStatus('❌ MQTT lỗi: '+e.message,'err')});client.on('close',()=>{badge(false);setStatus('⚪ MQTT đã ngắt kết nối','warn')});client.on('message',(topic,payload)=>{const text=payload.toString();if(topic===t.status){$('devStatus').textContent=text;return}try{const d=JSON.parse(text);if(Number.isFinite(Number(d.temperature))&&Number(d.temperature)>-90)$('temp').textContent=Number(d.temperature).toFixed(1)+' °C';if(Number.isFinite(Number(d.humidity))&&Number(d.humidity)>=0)$('hum').textContent=Number(d.humidity).toFixed(1)+' %';$('tvoc').textContent=d.tvoc!=null?d.tvoc+' ppb':'--';$('eco2').textContent=d.eco2!=null?d.eco2+' ppm':'--';$('aqi').textContent=d.status||d.aqi||'--';$('last').textContent=new Date().toLocaleString('vi-VN');}catch(e){setStatus('⚠️ Telemetry không phải JSON hợp lệ.','warn')}})};
-$('disconnect').onclick=()=>{if(client){client.end(true);client=null}badge(false);setStatus('Đã ngắt kết nối.')};load();
+function connect(auto=false){
+ const host=$('host').value.trim(),port=Number($('port').value)||8884,user=$('user').value.trim(),pass=$('pass').value,t=topics();
+ if(!host||!t){if(!auto)setStatus(!host?'⚠️ Nhập WebSocket Broker.':'⚠️ Nhập Device ID.','warn');return}
+ save();manualDisconnect=false;
+ if(client){try{client.end(true)}catch(e){}client=null}
+ setStatus(auto?'⏳ Đang tự động kết nối lại MQTT...':'⏳ Đang kết nối MQTT over WebSocket...');
+ client=mqtt.connect(`wss://${host}:${port}/mqtt`,{username:user,password:pass,clientId:'kgx-web-'+Math.random().toString(16).slice(2),clean:false,keepalive:30,connectTimeout:10000,reconnectPeriod:3000,resubscribe:true});
+ client.on('connect',()=>{badge(true);setStatus('✅ MQTT WebSocket đã kết nối.','ok');$('telemetry').textContent=t.telemetry;$('statusTopic').textContent=t.status;client.subscribe([t.telemetry,t.status],{qos:1},e=>{if(e)setStatus('⚠️ Subscribe lỗi: '+e.message,'warn')})});
+ client.on('reconnect',()=>{badge(false);setStatus('⏳ MQTT mất kết nối, đang tự động kết nối lại...','warn')});
+ client.on('offline',()=>{badge(false);if(!manualDisconnect)setStatus('⚠️ MQTT đang offline, sẽ tự kết nối lại...','warn')});
+ client.on('error',e=>{badge(false);if(!manualDisconnect)setStatus('❌ MQTT lỗi: '+e.message,'err')});
+ client.on('close',()=>{badge(false);if(!manualDisconnect)setStatus('⚠️ Kết nối MQTT đã đóng, đang chờ reconnect...','warn')});
+ client.on('message',(topic,payload)=>{const text=payload.toString();if(topic===t.status){$('devStatus').textContent=text;return}try{const d=JSON.parse(text);if(Number.isFinite(Number(d.temperature)))$('temp').textContent=Number(d.temperature).toFixed(1)+' °C';if(Number.isFinite(Number(d.humidity)))$('hum').textContent=Number(d.humidity).toFixed(1)+' %';$('tvoc').textContent=d.tvoc!=null?d.tvoc+' ppb':'--';$('eco2').textContent=d.eco2!=null?d.eco2+' ppm':'--';$('aqi').textContent=d.status??d.aqi??'--';$('last').textContent=new Date().toLocaleString('vi-VN')}catch(e){setStatus('⚠️ Telemetry không phải JSON hợp lệ.','warn')}})
+}
+$('connect').onclick=()=>connect(false);
+$('disconnect').onclick=()=>{manualDisconnect=true;if(reconnectTimer)clearTimeout(reconnectTimer);if(client){try{client.end(true)}catch(e){}client=null}badge(false);setStatus('Đã ngắt kết nối. Auto reconnect đã tắt.');};
+['host','port','user','device'].forEach(id=>$(id).addEventListener('change',save));
+$('pass').addEventListener('input',()=>{if($('pass').value)sessionStorage.setItem(SESSION,$('pass').value)});
+load();
+// Sau refresh: nếu đã có cấu hình và password trong session, tự kết nối.
+if($('host').value&&$('device').value&&$('pass').value){setTimeout(()=>connect(true),250)}else if($('host').value&&$('device').value){setStatus('🔐 Đã nhớ cấu hình. Nhập lại password để tự kết nối.','warn')}
 </script>
-</body></html>
+</body>
+</html>
