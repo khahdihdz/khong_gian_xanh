@@ -1,0 +1,56 @@
+name: Đồng bộ header footer chung
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Lấy mã nguồn
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Chèn common.js vào toàn bộ HTML
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed=0
+          while IFS= read -r -d '' file; do
+            if ! grep -qE '<script[^>]+src=["'"']/common\.js["'"']' "$file"; then
+              python3 - "$file" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+s = p.read_text(encoding='utf-8')
+marker = '<script src="/common.js"></script>'
+if marker not in s:
+    if '</body>' in s:
+        s = s.replace('</body>', marker + '</body>', 1)
+    else:
+        s += '\n' + marker + '\n'
+    p.write_text(s, encoding='utf-8')
+PY
+              changed=1
+            fi
+          done < <(find data cloud-dashboard -type f -name '*.html' -print0 2>/dev/null || true)
+          if [ "$changed" = "1" ]; then
+            echo "COMMON_HTML_CHANGED=1" >> "$GITHUB_ENV"
+          else
+            echo "COMMON_HTML_CHANGED=0" >> "$GITHUB_ENV"
+          fi
+
+      - name: Commit thay đổi
+        if: env.COMMON_HTML_CHANGED == '1'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/*.html cloud-dashboard/*.html 2>/dev/null || true
+          git commit -m "Đồng bộ header footer chung cho toàn bộ HTML"
+          git push
