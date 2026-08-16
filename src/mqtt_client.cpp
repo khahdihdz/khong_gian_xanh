@@ -134,7 +134,7 @@ static bool connectMqtt() {
     return true;
 }
 
-mqttClientInit() {
+void mqttClientInit() {
     uint64_t mac = ESP.getEfuseMac();
     s_deviceId = String("esp32-") + String((uint32_t)(mac >> 24), HEX) + String((uint32_t)mac, HEX);
     s_deviceId.toLowerCase();
