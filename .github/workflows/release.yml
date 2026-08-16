@@ -1,6 +1,5 @@
 name: Build & Release Firmware
 
-# Tự động chạy sau mỗi lần push vào nhánh main (bỏ qua nếu chỉ sửa README/docs)
 on:
   push:
     branches: [ "main" ]
@@ -49,7 +48,7 @@ jobs:
           # PWA chỉ dùng trên Cloudflare Pages; không đóng gói vào LittleFS ESP32.
           rm -f .esp32-data/pwa.js
 
-          # Các trang ESP32 không được phụ thuộc vào pwa.js.
+          # Các trang ESP32 không được phụ thuộc vào pwa.js hoặc route Cloudflare.
           python - <<'PY'
           from pathlib import Path
           import re
@@ -83,8 +82,13 @@ jobs:
             exit 1
           fi
 
-          if grep -RInE 'pwa\.js|href=["'"']/mqtt$|href=["'"']/tools$|href=["'"']/wifi$|href=["'"']/update$' .esp32-data --include='*.html'; then
-            echo "::error::HTML ESP32 vẫn chứa liên kết phụ thuộc route Cloudflare/PWA"
+          if grep -RInF 'pwa.js' .esp32-data --include='*.html'; then
+            echo "::error::HTML ESP32 vẫn gọi pwa.js"
+            exit 1
+          fi
+
+          if grep -RInE 'href=["'"']/((mqtt)|(tools)|(wifi)|(update))["'"']' .esp32-data --include='*.html'; then
+            echo "::error::HTML ESP32 vẫn chứa route Cloudflare"
             exit 1
           fi
 
@@ -117,7 +121,6 @@ jobs:
               subtype = data[off+3]
               p_offset, p_size = struct.unpack_from('<II', data, off+4)
               label = data[off+8:off+24].split(b'\0', 1)[0].decode('ascii', 'replace')
-              # ESP32 data partition types: 0x01 (data), with LittleFS/SPIFFS subtypes.
               if ptype == 0x01 and subtype in (0x82, 0x83):
                   found_fs.append((label, p_offset, p_size))
                   max_fs_end = max(max_fs_end, p_size)
@@ -136,7 +139,7 @@ jobs:
       - name: Kiểm tra nội dung LittleFS
         run: |
           set -e
-          if grep -RInE 'pwa\.js' .esp32-data --include='*.html' --include='*.js'; then
+          if grep -RInF 'pwa.js' .esp32-data --include='*.html' --include='*.js'; then
             echo "::error::Phát hiện pwa.js trong nguồn LittleFS ESP32"
             exit 1
           fi
