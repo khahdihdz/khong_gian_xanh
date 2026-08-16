@@ -87,7 +87,7 @@ jobs:
             exit 1
           fi
 
-          if grep -RInE 'href=["'"']/((mqtt)|(tools)|(wifi)|(update))["'"']' .esp32-data --include='*.html'; then
+          if grep -RInE "href=[\"']/((mqtt)|(tools)|(wifi)|(update))[\"']" .esp32-data --include='*.html'; then
             echo "::error::HTML ESP32 vẫn chứa route Cloudflare"
             exit 1
           fi
