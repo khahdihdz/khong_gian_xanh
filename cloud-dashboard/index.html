@@ -2,346 +2,39 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Không Gian Xanh — Xem Từ Xa</title>
 <meta name="theme-color" content="#0c130c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{
-  --bg:#0c130c; --panel:#182016; --panel-2:#1e2a1a; --line:#31432c;
-  --text:#f5f8ee; --muted:#a7b69c; --muted-2:#77876c;
-  --leaf:#4ade80; --leaf-soft:rgba(74,222,128,.20);
-  --amber:#fbbf24; --amber-soft:rgba(251,191,36,.20);
-  --clay:#fb923c; --clay-soft:rgba(251,146,60,.20);
-  --red:#f87171; --red-soft:rgba(248,113,113,.20);
-  --status:var(--muted); --status-soft:rgba(167,182,156,.16);
-}
-*{box-sizing:border-box;}
-html,body{margin:0;padding:0;}
-body{
-  background:radial-gradient(1100px 500px at 15% -10%, rgba(74,222,128,.10), transparent 60%), var(--bg);
-  color:var(--text); font-family:'Be Vietnam Pro',system-ui,sans-serif;
-  padding-bottom:48px; min-height:100vh;
-}
-.mono{font-family:'JetBrains Mono',ui-monospace,monospace;}
-.topbar{
-  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
-  padding:16px 20px; border-bottom:1px solid var(--line);
-}
-.brand{ display:flex; align-items:baseline; gap:9px; font-family:'Fraunces',serif; font-weight:600; font-size:1.35rem; }
-.brand small{ font-family:'Be Vietnam Pro',sans-serif; font-weight:500; font-size:.68rem; color:var(--muted-2); letter-spacing:1.5px; text-transform:uppercase; display:block; margin-top:-2px; }
-.top-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-.conn-pill{ display:flex; align-items:center; gap:7px; font-size:.8rem; color:var(--muted); background:var(--panel); border:1px solid var(--line); padding:6px 12px 6px 10px; border-radius:99px; }
-.conn-dot{ width:8px; height:8px; border-radius:50%; background:var(--red); flex:none; }
-.conn-dot.conn-online{ background:var(--leaf); box-shadow:0 0 7px var(--leaf); }
-.btn{ font-size:.82rem; font-weight:500; padding:7px 14px; border-radius:99px; border:1px solid var(--line); background:var(--panel); color:var(--text); cursor:pointer; font-family:inherit; }
-.btn:hover{ border-color:var(--leaf); }
-
-#warningBanner{ display:none; align-items:center; gap:10px; margin:16px 20px 0; padding:12px 16px; background:var(--red-soft); border:1px solid rgba(209,84,63,.4); border-radius:12px; color:#f3c9bf; font-size:.88rem; }
-#warningBanner strong{ color:var(--red); }
-#setupNotice{ margin:16px 20px 0; padding:14px 16px; background:var(--amber-soft); border:1px solid rgba(217,178,61,.35); border-radius:12px; color:#f0dfa9; font-size:.88rem; }
-
-.wrap{ max-width:1180px; margin:0 auto; padding:0 20px; }
-.main-grid{ display:grid; grid-template-columns:1fr; gap:20px; margin-top:24px; }
-.hero{ display:grid; grid-template-columns:220px 1fr; gap:28px; align-items:center; padding:24px; background:var(--panel); border:1px solid var(--line); border-radius:20px; min-width:0; }
-.leaf-gauge{ display:flex; flex-direction:column; align-items:center; gap:10px; }
-.leaf-gauge svg{ width:120px; height:120px; filter:drop-shadow(0 0 18px var(--status-soft)); }
-.leaf-gauge svg .leaf-body{ fill:var(--status-soft); stroke:var(--status); stroke-width:5; transition:fill .4s ease, stroke .4s ease; }
-.leaf-gauge svg .leaf-vein{ stroke:var(--status); stroke-width:3; fill:none; opacity:.6; }
-.leaf-gauge .eyebrow{ font-size:.7rem; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted-2); font-weight:600; }
-.hero-right{ min-width:0; }
-.hero-right .label{ font-size:.78rem; color:var(--muted); margin-bottom:2px; }
-#valAqi{ font-family:'Fraunces',serif; font-weight:600; font-size:2.5rem; line-height:1.1; margin:0 0 16px; color:var(--status); }
-.readouts{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px 22px; }
-.readout{ display:flex; align-items:center; gap:10px; min-width:0; }
-.readout .ico{ font-size:1.15rem; flex:none; opacity:.9; }
-.readout .rl .lb{ font-size:.72rem; color:var(--muted-2); }
-.readout .rl .val{ font-family:'JetBrains Mono',monospace; font-size:1rem; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.leaf-gauge[data-status="good"]{ --status:var(--leaf); --status-soft:var(--leaf-soft); }
-.leaf-gauge[data-status="mid"]{ --status:var(--amber); --status-soft:var(--amber-soft); }
-.leaf-gauge[data-status="bad"]{ --status:var(--clay); --status-soft:var(--clay-soft); }
-.leaf-gauge[data-status="pollute"]{ --status:var(--red); --status-soft:var(--red-soft); }
-#valAqi.status-good{ color:var(--leaf); } #valAqi.status-mid{ color:var(--amber); }
-#valAqi.status-bad{ color:var(--clay); } #valAqi.status-pollute{ color:var(--red); }
-
-.panel{ background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:20px; min-width:0; }
-.panel-head{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px; }
-.panel-head h2{ font-family:'Fraunces',serif; font-weight:500; font-size:1.15rem; margin:0; }
-.range-group{ display:flex; gap:6px; background:var(--panel-2); padding:4px; border-radius:99px; }
-.range-group button{ border:none; background:transparent; color:var(--muted); font-size:.78rem; font-weight:500; padding:6px 13px; border-radius:99px; cursor:pointer; font-family:inherit; }
-.range-group button.active{ background:var(--leaf); color:#0d130a; }
-.chart-container{ position:relative; height:300px; }
-.last-sync{ text-align:center; color:var(--muted-2); font-size:.78rem; margin-top:10px; }
-footer{ text-align:center; color:var(--muted-2); font-size:.8rem; margin-top:28px; }
-
-.modal-backdrop{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); align-items:center; justify-content:center; padding:20px; z-index:50; }
-.modal-backdrop.open{ display:flex; }
-.modal{ background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:22px; width:100%; max-width:420px; }
-.modal h3{ margin:0 0 6px; font-family:'Fraunces',serif; font-weight:500; }
-.modal p{ color:var(--muted); font-size:.85rem; margin:0 0 16px; line-height:1.5; }
-.field{ margin-bottom:12px; }
-.field label{ display:block; font-size:.78rem; color:var(--muted); margin-bottom:5px; }
-.field input{ width:100%; padding:9px 12px; border-radius:10px; border:1px solid var(--line); background:var(--panel-2); color:var(--text); font-family:inherit; font-size:.9rem; }
-.modal-actions{ display:flex; gap:10px; margin-top:16px; }
-.btn-fill{ background:var(--leaf); color:#0d130a; border-color:transparent; font-weight:600; }
-
-@media (min-width:820px){ .readouts{ grid-template-columns:repeat(5,1fr); gap:10px 16px; } }
-@media (min-width:1100px){
-  .main-grid{ grid-template-columns:1.05fr 1.35fr; align-items:start; }
-  .hero{ height:100%; } .readouts{ grid-template-columns:repeat(2,1fr); } .chart-container{ height:360px; }
-}
-@media (max-width:680px){ .hero{ grid-template-columns:1fr; text-align:center; padding:20px; } }
+:root{--bg:#0c130c;--panel:#182016;--panel-2:#1e2a1a;--line:#31432c;--text:#f5f8ee;--muted:#a7b69c;--muted-2:#77876c;--leaf:#4ade80;--leaf-soft:rgba(74,222,128,.20);--amber:#fbbf24;--amber-soft:rgba(251,191,36,.20);--clay:#fb923c;--clay-soft:rgba(251,146,60,.20);--red:#f87171;--red-soft:rgba(248,113,113,.20);--status:var(--muted);--status-soft:rgba(167,182,156,.16)}
+*{box-sizing:border-box}html,body{margin:0;padding:0;min-height:100%;background:var(--bg);color:var(--text)}body{background:radial-gradient(1100px 500px at 15% -10%,rgba(74,222,128,.10),transparent 60%),var(--bg);font-family:'Be Vietnam Pro',system-ui,sans-serif;padding-bottom:24px;min-height:100vh}
+/* Header/footer đồng bộ với giao diện ESP32 */
+.kgx-header{width:100%;padding:14px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--bg);position:relative;z-index:1000}.kgx-brand{flex:1 1 auto;min-width:0;font:600 1.35rem Fraunces,'Be Vietnam Pro',system-ui,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.kgx-brand small{display:block;color:var(--muted);font:500 .65rem 'Be Vietnam Pro',system-ui,sans-serif;letter-spacing:1.4px;text-transform:uppercase}.kgx-actions{flex:0 0 auto;display:grid;grid-template-columns:210px 112px 104px;align-items:center;gap:8px;white-space:nowrap}.kgx-pill{height:40px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);background:var(--panel);border-radius:99px;padding:0 12px;color:var(--muted);font-size:.8rem;overflow:hidden;text-overflow:ellipsis}.kgx-dot{display:inline-block;flex:0 0 8px;width:8px;height:8px;border-radius:50%;background:var(--red);margin-right:7px}.kgx-dot.on{background:var(--leaf);box-shadow:0 0 7px var(--leaf)}.kgx-nav{position:relative;width:104px;height:40px}.kgx-nav-toggle{width:104px;height:40px;border:1px solid var(--line);background:var(--panel);border-radius:99px;padding:0 13px;color:var(--text);font:inherit;font-size:.8rem;cursor:pointer}.kgx-nav-menu{display:none;position:absolute;right:0;top:48px;width:235px;padding:7px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 35px rgba(0,0,0,.35);z-index:10000}.kgx-nav.open .kgx-nav-menu{display:grid;gap:3px}.kgx-nav-menu a,.kgx-nav-menu button{display:block;width:100%;padding:10px 12px;border:0;border-radius:9px;background:transparent;color:var(--text);text-decoration:none;font:inherit;font-size:.82rem;text-align:left;cursor:pointer;white-space:nowrap}.kgx-nav-menu a:hover,.kgx-nav-menu button:hover{background:var(--panel-2);color:var(--leaf)}.kgx-footer{width:100%;max-width:1100px;margin:24px auto 0;padding:18px 20px;border-top:1px solid var(--line);text-align:center;color:var(--muted);font-size:.78rem}.kgx-footer a{color:var(--leaf);text-decoration:none;font-weight:600}
+#warningBanner{display:none;align-items:center;gap:10px;margin:16px 20px 0;padding:12px 16px;background:var(--red-soft);border:1px solid rgba(209,84,63,.4);border-radius:12px;color:#f3c9bf;font-size:.88rem}#warningBanner strong{color:var(--red)}#setupNotice{margin:16px 20px 0;padding:14px 16px;background:var(--amber-soft);border:1px solid rgba(217,178,61,.35);border-radius:12px;color:#f0dfa9;font-size:.88rem}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}.main-grid{display:grid;grid-template-columns:1fr;gap:20px;margin-top:24px}.hero{display:grid;grid-template-columns:220px 1fr;gap:28px;align-items:center;padding:24px;background:var(--panel);border:1px solid var(--line);border-radius:20px;min-width:0}.leaf-gauge{display:flex;flex-direction:column;align-items:center;gap:10px}.leaf-gauge svg{width:120px;height:120px;filter:drop-shadow(0 0 18px var(--status-soft))}.leaf-gauge svg .leaf-body{fill:var(--status-soft);stroke:var(--status);stroke-width:5}.leaf-gauge svg .leaf-vein{stroke:var(--status);stroke-width:3;fill:none;opacity:.6}.leaf-gauge .eyebrow{font-size:.7rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted-2);font-weight:600}.hero-right{min-width:0}.hero-right .label{font-size:.78rem;color:var(--muted);margin-bottom:2px}#valAqi{font-family:'Fraunces',serif;font-weight:600;font-size:2.5rem;line-height:1.1;margin:0 0 16px;color:var(--status)}.readouts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 22px}.readout{display:flex;align-items:center;gap:10px;min-width:0}.readout .ico{font-size:1.15rem;flex:none}.readout .rl .lb{font-size:.72rem;color:var(--muted-2)}.readout .rl .val{font-family:'JetBrains Mono',monospace;font-size:1rem;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.leaf-gauge[data-status="good"]{--status:var(--leaf);--status-soft:var(--leaf-soft)}.leaf-gauge[data-status="mid"]{--status:var(--amber);--status-soft:var(--amber-soft)}.leaf-gauge[data-status="bad"]{--status:var(--clay);--status-soft:var(--clay-soft)}.leaf-gauge[data-status="pollute"]{--status:var(--red);--status-soft:var(--red-soft)}#valAqi.status-good{color:var(--leaf)}#valAqi.status-mid{color:var(--amber)}#valAqi.status-bad{color:var(--clay)}#valAqi.status-pollute{color:var(--red)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:20px;min-width:0}.panel-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px}.panel-head h2{font-family:'Fraunces',serif;font-weight:500;font-size:1.15rem;margin:0}.range-group{display:flex;gap:6px;background:var(--panel-2);padding:4px;border-radius:99px}.range-group button{border:none;background:transparent;color:var(--muted);font-size:.78rem;font-weight:500;padding:6px 13px;border-radius:99px;cursor:pointer;font-family:inherit}.range-group button.active{background:var(--leaf);color:#0d130a}.chart-container{position:relative;height:300px}.last-sync{text-align:center;color:var(--muted-2);font-size:.78rem;margin-top:10px}
+.modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:20px;z-index:50}.modal-backdrop.open{display:flex}.modal{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;width:100%;max-width:420px}.modal h3{margin:0 0 6px;font-family:'Fraunces',serif}.modal p{color:var(--muted);font-size:.85rem;line-height:1.5}.field{margin-bottom:12px}.field label{display:block;font-size:.78rem;color:var(--muted);margin-bottom:5px}.field input{width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel-2);color:var(--text);font-family:inherit;font-size:.9rem}.modal-actions{display:flex;gap:10px;margin-top:16px}.btn{font-size:.82rem;font-weight:500;padding:7px 14px;border-radius:99px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer;font-family:inherit}.btn:hover{border-color:var(--leaf)}.btn-fill{background:var(--leaf);color:#0d130a;border-color:transparent;font-weight:600}
+@media(min-width:820px){.readouts{grid-template-columns:repeat(4,1fr);gap:10px 16px}}@media(min-width:1100px){.main-grid{grid-template-columns:1.05fr 1.35fr;align-items:start}.hero{height:100%}.readouts{grid-template-columns:repeat(2,1fr)}.chart-container{height:360px}}@media(max-width:760px){.kgx-header{padding:12px 14px;display:block}.kgx-brand{display:block;width:100%;font-size:1.22rem;margin-bottom:10px}.kgx-actions{width:100%;grid-template-columns:minmax(0,1fr) 96px 96px;gap:7px}.kgx-pill,.kgx-nav,.kgx-nav-toggle{height:38px}.kgx-nav,.kgx-nav-toggle{width:96px}.kgx-nav-menu{position:fixed;right:12px;top:112px;width:min(235px,calc(100vw - 24px));min-width:0}.hero{grid-template-columns:1fr;text-align:center;padding:20px}.kgx-footer{margin-top:18px;padding:16px 12px}}@media(max-width:390px){.kgx-actions{grid-template-columns:minmax(0,1fr) 88px 88px}.kgx-nav,.kgx-nav-toggle{width:88px}.kgx-pill,.kgx-nav-toggle{font-size:.74rem;padding-left:8px;padding-right:8px}}
 </style>
 </head>
 <body>
-
-<nav class="topbar">
-  <div class="brand">🌿 Không Gian Xanh <small>Xem Từ Xa</small></div>
-  <div class="top-right">
-    <div class="conn-pill"><span class="conn-dot" id="connDot"></span><span id="connText">Chưa kết nối relay</span></div>
-    <button class="btn" id="btnSettings">⚙️ Cấu hình</button>
-  </div>
-</nav>
-
-<div id="setupNotice" style="display:none;">
-  ⚠️ Chưa cấu hình relay. Bấm <strong>⚙️ Cấu hình</strong> để nhập URL relay
-  (xem <code>cloud-relay/README.md</code>) và token đọc dữ liệu.
-</div>
-
-<div id="warningBanner">
-  <strong>⚠️ Cảnh báo chất lượng không khí:</strong> <span id="warningReason"></span>
-</div>
-
-<div class="wrap">
-  <div class="main-grid">
-
-  <section class="hero">
-    <div class="leaf-gauge" id="leafGauge" data-status="">
-      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <path class="leaf-body" d="M50 8 C78 14, 92 40, 78 66 C66 86, 40 94, 22 88 C10 68, 10 30, 50 8 Z"/>
-        <path class="leaf-vein" d="M50 12 C48 40, 44 68, 24 86"/>
-        <path class="leaf-vein" d="M50 30 C60 34, 68 40, 72 46"/>
-        <path class="leaf-vein" d="M44 52 C54 54, 62 58, 68 64"/>
-      </svg>
-      <span class="eyebrow">Tình trạng phòng</span>
-    </div>
-    <div class="hero-right">
-      <div class="label">Chất lượng không khí</div>
-      <div id="valAqi">--</div>
-      <div class="readouts">
-        <div class="readout"><span class="ico">🌡️</span><div class="rl"><div class="lb">Nhiệt độ</div><div class="val" id="valTemp">--</div></div></div>
-        <div class="readout"><span class="ico">💧</span><div class="rl"><div class="lb">Độ ẩm</div><div class="val" id="valHumidity">--</div></div></div>
-        <div class="readout"><span class="ico">🧪</span><div class="rl"><div class="lb">TVOC</div><div class="val" id="valTvoc">--</div></div></div>
-        <div class="readout"><span class="ico">🫧</span><div class="rl"><div class="lb">eCO2</div><div class="val" id="valEco2">--</div></div></div>
-      </div>
-    </div>
-  </section>
-
-  <section class="panel">
-    <div class="panel-head">
-      <h2>📈 Nhật ký theo thời gian</h2>
-      <div class="range-group" role="group">
-        <button data-hours="1">1 giờ</button>
-        <button data-hours="6">6 giờ</button>
-        <button data-hours="12" class="active">12 giờ</button>
-        <button data-hours="24">24 giờ</button>
-      </div>
-    </div>
-    <div class="chart-container"><canvas id="historyChart"></canvas></div>
-  </section>
-
-  </div>
-  <div class="last-sync" id="lastSync"></div>
-  <footer>Không Gian Xanh · Xem từ xa qua Cloud Relay — không cần cùng mạng WiFi với thiết bị</footer>
-</div>
-
-<div class="modal-backdrop" id="settingsModal">
-  <div class="modal">
-    <h3>⚙️ Cấu hình Relay</h3>
-    <p>Nhập URL relay và token đọc dữ liệu (READ_TOKEN) đã tạo khi triển khai
-    Cloudflare Worker. Thông tin này chỉ lưu trên trình duyệt của bạn.</p>
-    <div class="field">
-      <label>URL relay</label>
-      <input type="text" id="inputUrl" placeholder="https://khong-gian-xanh-relay.xxx.workers.dev">
-    </div>
-    <div class="field">
-      <label>Token đọc dữ liệu (nếu có)</label>
-      <input type="text" id="inputToken" placeholder="Để trống nếu relay cho đọc công khai">
-    </div>
-    <div class="modal-actions">
-      <button class="btn" id="btnCancel">Huỷ</button>
-      <button class="btn btn-fill" id="btnSave">Lưu &amp; Kết nối</button>
-    </div>
-  </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script>
-const LS_URL = 'kgx_relay_url';
-const LS_TOKEN = 'kgx_relay_token';
-let pollTimer, historyTimer;
-
-function getConfig() {
-  return { url: localStorage.getItem(LS_URL) || '', token: localStorage.getItem(LS_TOKEN) || '' };
-}
-function saveConfig(url, token) {
-  localStorage.setItem(LS_URL, url);
-  localStorage.setItem(LS_TOKEN, token);
-}
-function apiUrl(path, hours) {
-  const { url, token } = getConfig();
-  let u = url.replace(/\/+$/, '') + path;
-  const params = [];
-  if (hours !== undefined) params.push('hours=' + hours);
-  if (token) params.push('token=' + encodeURIComponent(token));
-  if (params.length) u += '?' + params.join('&');
-  return u;
-}
-
-function aqiClass(status) {
-  switch (status) {
-    case 'Rất tốt': case 'Tốt': return 'status-good';
-    case 'Trung bình': return 'status-mid';
-    case 'Kém': return 'status-bad';
-    case 'Ô nhiễm': return 'status-pollute';
-    default: return '';
-  }
-}
-function statusKey(status) {
-  switch (status) {
-    case 'Rất tốt': case 'Tốt': return 'good';
-    case 'Trung bình': return 'mid';
-    case 'Kém': return 'bad';
-    case 'Ô nhiễm': return 'pollute';
-    default: return '';
-  }
-}
-
-function setConnected(ok, text) {
-  document.getElementById('connDot').className = ok ? 'conn-dot conn-online' : 'conn-dot';
-  document.getElementById('connText').textContent = text;
-}
-
-function updateUI(d) {
-  if (!d || Object.keys(d).length === 0) return;
-  document.getElementById('valTemp').textContent = d.sht31_ok ? `${Number(d.temperature).toFixed(1)}°C` : 'Lỗi';
-  document.getElementById('valHumidity').textContent = d.sht31_ok ? `${Number(d.humidity).toFixed(0)}%` : 'Lỗi';
-  const aqiEl = document.getElementById('valAqi');
-  aqiEl.textContent = d.ens160_ok ? d.status : 'Lỗi';
-  aqiEl.className = aqiClass(d.status);
-  document.getElementById('leafGauge').dataset.status = d.ens160_ok ? statusKey(d.status) : '';
-  document.getElementById('valTvoc').textContent = d.ens160_ok ? `${d.tvoc} ppb` : '--';
-  document.getElementById('valEco2').textContent = d.ens160_ok ? `${d.eco2} ppm` : '--';
-
-  const banner = document.getElementById('warningBanner');
-  if (d.warning) { banner.style.display = 'flex'; document.getElementById('warningReason').textContent = d.warning_reason; }
-  else { banner.style.display = 'none'; }
-
-  if (d.time) {
-    const dt = new Date(d.time * 1000);
-    document.getElementById('lastSync').textContent = 'Cập nhật lần cuối: ' + dt.toLocaleString('vi-VN');
-  }
-}
-
-async function fetchCurrentData() {
-  const { url } = getConfig();
-  if (!url) { setConnected(false, 'Chưa cấu hình'); return; }
-  try {
-    const res = await fetch(apiUrl('/api/data'));
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    setConnected(true, 'Đã kết nối relay');
-    updateUI(data);
-  } catch (e) {
-    setConnected(false, 'Mất kết nối relay, đang thử lại...');
-  }
-}
-
-const ctx = document.getElementById('historyChart').getContext('2d');
-const historyChart = new Chart(ctx, {
-  type: 'line',
-  data: {
-    labels: [],
-    datasets: [
-      { label: 'Nhiệt độ (°C)', data: [], borderColor: '#fb7185', tension: 0.3, yAxisID: 'y', pointRadius: 0 },
-      { label: 'Độ ẩm (%)', data: [], borderColor: '#38bdf8', tension: 0.3, yAxisID: 'y', pointRadius: 0 },
-      { label: 'TVOC (ppb)', data: [], borderColor: '#fbbf24', tension: 0.3, yAxisID: 'y1', pointRadius: 0 },
-      { label: 'eCO2 (ppm)', data: [], borderColor: '#4ade80', tension: 0.3, yAxisID: 'y1', pointRadius: 0 },
-      { label: 'AQI', data: [], borderColor: '#c084fc', tension: 0.3, yAxisID: 'y2', pointRadius: 0 },
-    ]
-  },
-  options: {
-    responsive: true, maintainAspectRatio: false,
-    interaction: { mode: 'index', intersect: false },
-    plugins: { legend: { labels: { color: '#e7ecdc', font: { family: "'Be Vietnam Pro', sans-serif", size: 11 } } } },
-    scales: {
-      x: { ticks: { color: '#a7b69c' }, grid: { color: '#31432c' } },
-      y:  { position: 'left', ticks: { color: '#a7b69c' }, grid: { color: '#31432c' } },
-      y1: { position: 'right', ticks: { color: '#a7b69c' }, grid: { display: false } },
-      y2: { display: false, min: 0, max: 5 }
-    }
-  }
-});
-
-async function loadHistory(hours) {
-  const { url } = getConfig();
-  if (!url) return;
-  try {
-    const res = await fetch(apiUrl('/api/history', hours));
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const records = await res.json();
-    const labels = records.map(r => new Date(r.time * 1000).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
-    historyChart.data.labels = labels;
-    historyChart.data.datasets[0].data = records.map(r => r.temperature);
-    historyChart.data.datasets[1].data = records.map(r => r.humidity);
-    historyChart.data.datasets[2].data = records.map(r => r.tvoc);
-    historyChart.data.datasets[3].data = records.map(r => r.eco2);
-    historyChart.data.datasets[4].data = records.map(r => r.aqi);
-    historyChart.update();
-  } catch (e) { console.error('Lỗi tải lịch sử từ relay', e); }
-}
-
-document.querySelectorAll('[data-hours]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('[data-hours]').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    loadHistory(btn.dataset.hours);
-  });
-});
-
-// ---- Modal cấu hình ----
-const modal = document.getElementById('settingsModal');
-function openModal() {
-  const { url, token } = getConfig();
-  document.getElementById('inputUrl').value = url;
-  document.getElementById('inputToken').value = token;
-  modal.classList.add('open');
-}
-document.getElementById('btnSettings').addEventListener('click', openModal);
-document.getElementById('btnCancel').addEventListener('click', () => modal.classList.remove('open'));
-document.getElementById('btnSave').addEventListener('click', () => {
-  const url = document.getElementById('inputUrl').value.trim();
-  const token = document.getElementById('inputToken').value.trim();
-  saveConfig(url, token);
-  modal.classList.remove('open');
-  startPolling();
-});
-
-function startPolling() {
-  clearInterval(pollTimer); clearInterval(historyTimer);
-  const { url } = getConfig();
-  document.getElementById('setupNotice').style.display = url ? 'none' : 'block';
-  if (!url) { setConnected(false, 'Chưa cấu hình'); return; }
-
-  fetchCurrentData();
-  loadHistory(document.querySelector('[data-hours].active').dataset.hours);
-  pollTimer = setInterval(fetchCurrentData, 15000); // relay không realtime qua WS, poll mỗi 15s là đủ
-  historyTimer = setInterval(() => loadHistory(document.querySelector('[data-hours].active').dataset.hours), 60000);
-}
-
-if (!getConfig().url) openModal();
-startPolling();
-</script>
-<script src="/common.js"></script></body>
-</html>
+<header class="kgx-header"><div class="kgx-brand">🌿 Không Gian Xanh<small>Giám sát môi trường phòng</small></div><div class="kgx-actions"><span class="kgx-pill"><span id="dot" class="kgx-dot"></span><span id="conn">Đang kiểm tra MQTT</span></span><span id="clock" class="kgx-pill">--:--:--</span><div class="kgx-nav" id="nav"><button class="kgx-nav-toggle" id="navToggle" type="button" aria-expanded="false">☰ Menu</button><nav class="kgx-nav-menu" aria-label="Điều hướng"><a href="#overview">🏠 Tổng quan</a><a href="#history">📈 Nhật ký</a><a href="#relay">⚙️ Cấu hình Relay</a><button type="button" id="menuRefresh">🔄 Làm mới dữ liệu</button></nav></div></div></header>
+<div id="setupNotice" style="display:none">⚠️ Chưa cấu hình relay. Mở <strong>⚙️ Cấu hình Relay</strong> trong Menu để nhập URL relay và token đọc dữ liệu.</div><div id="warningBanner"><strong>⚠️ Cảnh báo chất lượng không khí:</strong><span id="warningReason"></span></div>
+<main class="wrap" id="overview"><div class="main-grid"><section class="hero"><div class="leaf-gauge" id="leafGauge"><svg viewBox="0 0 100 100"><path class="leaf-body" d="M50 8 C78 14,92 40,78 66 C66 86,40 94,22 88 C10 68,10 30,50 8 Z"/><path class="leaf-vein" d="M50 12 C48 40,44 68,24 86"/><path class="leaf-vein" d="M50 30 C60 34,68 40,72 46"/><path class="leaf-vein" d="M44 52 C54 54,62 58,68 64"/></svg><span class="eyebrow">Tình trạng phòng</span></div><div class="hero-right"><div class="label">Chất lượng không khí — dữ liệu thực tế từ ENS160</div><div id="valAqi">--</div><div class="readouts"><div class="readout"><span class="ico">🌡️</span><div class="rl"><div class="lb">Nhiệt độ — SHT31</div><div class="val" id="valTemp">--</div></div></div><div class="readout"><span class="ico">💧</span><div class="rl"><div class="lb">Độ ẩm — SHT31</div><div class="val" id="valHumidity">--</div></div></div><div class="readout"><span class="ico">📶</span><div class="rl"><div class="lb">Wi-Fi thực tế</div><div class="val" id="valWifi">--</div></div></div><div class="readout"><span class="ico">🧪</span><div class="rl"><div class="lb">TVOC — ENS160</div><div class="val" id="valTvoc">--</div></div></div><div class="readout"><span class="ico">🫧</span><div class="rl"><div class="lb">eCO2 — ENS160</div><div class="val" id="valEco2">--</div></div></div></div></div></section><section class="panel" id="history"><div class="panel-head"><h2>📈 Nhật ký theo thời gian</h2><div class="range-group"><button data-hours="1">1 giờ</button><button data-hours="6">6 giờ</button><button data-hours="12" class="active">12 giờ</button><button data-hours="24">24 giờ</button></div></div><div class="chart-container"><canvas id="historyChart"></canvas></div></section></div><div class="last-sync" id="lastSync"></div></main>
+<footer class="kgx-footer">Powered by <a href="https://khahdihdz.github.io" target="_blank" rel="noopener noreferrer">khahdihdz.github.io</a></footer>
+<div class="modal-backdrop" id="settingsModal"><div class="modal" id="relay"><h3>⚙️ Cấu hình Relay</h3><p>Nhập URL relay và token đọc dữ liệu (READ_TOKEN). Thông tin chỉ lưu trên trình duyệt của bạn.</p><div class="field"><label>URL relay</label><input type="text" id="inputUrl" placeholder="https://khong-gian-xanh-relay.xxx.workers.dev"></div><div class="field"><label>Token đọc dữ liệu (nếu có)</label><input type="text" id="inputToken" placeholder="Để trống nếu relay cho đọc công khai"></div><div class="modal-actions"><button class="btn" id="btnCancel">Huỷ</button><button class="btn btn-fill" id="btnSave">Lưu &amp; Kết nối</button></div></div></div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script><script>
+const LS_URL='kgx_relay_url',LS_TOKEN='kgx_relay_token';let pollTimer,historyTimer;
+const cfg=()=>({url:localStorage.getItem(LS_URL)||'',token:localStorage.getItem(LS_TOKEN)||''});const save=(u,t)=>{localStorage.setItem(LS_URL,u);localStorage.setItem(LS_TOKEN,t)};function api(path,h){const c=cfg();let u=c.url.replace(/\/+$/,'')+path,p=[];if(h!==undefined)p.push('hours='+h);if(c.token)p.push('token='+encodeURIComponent(c.token));return p.length?u+'?'+p.join('&'):u}
+function header(on,text){document.getElementById('dot').className='kgx-dot'+(on?' on':'');document.getElementById('conn').textContent=text}function clock(t){document.getElementById('clock').textContent=t?new Date(t*1000).toLocaleTimeString('vi-VN'):new Date().toLocaleTimeString('vi-VN')}
+function key(s){return(s==='Rất tốt'||s==='Tốt')?'good':s==='Trung bình'?'mid':s==='Kém'?'bad':s==='Ô nhiễm'?'pollute':''}function ui(d){if(!d||!Object.keys(d).length)return;document.getElementById('valTemp').textContent=d.sht31_ok?Number(d.temperature).toFixed(1)+'°C':'Lỗi';document.getElementById('valHumidity').textContent=d.sht31_ok?Number(d.humidity).toFixed(1)+'%':'Lỗi';document.getElementById('valWifi').textContent=d.rssi!==undefined?d.rssi+' dBm':'--';let a=document.getElementById('valAqi');a.textContent=d.ens160_ok?d.status:'Lỗi';a.className=key(d.status)?'status-'+key(d.status):'';document.getElementById('leafGauge').dataset.status=d.ens160_ok?key(d.status):'';document.getElementById('valTvoc').textContent=d.ens160_ok?d.tvoc+' ppb':'--';document.getElementById('valEco2').textContent=d.ens160_ok?d.eco2+' ppm':'--';let b=document.getElementById('warningBanner');if(d.warning){b.style.display='flex';document.getElementById('warningReason').textContent=d.warning_reason||''}else b.style.display='none';if(d.time){clock(d.time);document.getElementById('lastSync').textContent='Cập nhật lần cuối: '+new Date(d.time*1000).toLocaleString('vi-VN')}}
+async function current(){const c=cfg();if(!c.url){header(false,'Chưa cấu hình MQTT');return}try{let r=await fetch(api('/api/data'),{cache:'no-store'});if(!r.ok)throw Error(r.status);ui(await r.json());header(true,'MQTT dữ liệu trực tuyến')}catch(e){header(false,'Relay offline, đang thử lại...')}}
+const chart=new Chart(document.getElementById('historyChart'),{type:'line',data:{labels:[],datasets:[{label:'Nhiệt độ (°C)',data:[],borderColor:'#fb7185',tension:.3,yAxisID:'y',pointRadius:0},{label:'Độ ẩm (%)',data:[],borderColor:'#38bdf8',tension:.3,yAxisID:'y',pointRadius:0},{label:'TVOC (ppb)',data:[],borderColor:'#fbbf24',tension:.3,yAxisID:'y1',pointRadius:0},{label:'eCO2 (ppm)',data:[],borderColor:'#4ade80',tension:.3,yAxisID:'y1',pointRadius:0},{label:'AQI',data:[],borderColor:'#c084fc',tension:.3,yAxisID:'y2',pointRadius:0}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:'#e7ecdc'}}},scales:{x:{ticks:{color:'#a7b69c'},grid:{color:'#31432c'}},y:{ticks:{color:'#a7b69c'},grid:{color:'#31432c'}},y1:{position:'right',ticks:{color:'#a7b69c'},grid:{display:false}},y2:{display:false,min:0,max:5}}}});
+async function history(h){if(!cfg().url)return;try{let r=await fetch(api('/api/history',h),{cache:'no-store'});if(!r.ok)throw Error(r.status);let x=await r.json();chart.data.labels=x.map(v=>new Date(v.time*1000).toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}));chart.data.datasets[0].data=x.map(v=>v.temperature);chart.data.datasets[1].data=x.map(v=>v.humidity);chart.data.datasets[2].data=x.map(v=>v.tvoc);chart.data.datasets[3].data=x.map(v=>v.eco2);chart.data.datasets[4].data=x.map(v=>v.aqi);chart.update()}catch(e){console.error(e)}}
+document.querySelectorAll('[data-hours]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-hours]').forEach(x=>x.classList.remove('active'));b.classList.add('active');history(b.dataset.hours)});
+const modal=document.getElementById('settingsModal');function openModal(){let c=cfg();inputUrl.value=c.url;inputToken.value=c.token;modal.classList.add('open');inputUrl.focus()}btnCancel.onclick=()=>modal.classList.remove('open');btnSave.onclick=()=>{save(inputUrl.value.trim(),inputToken.value.trim());modal.classList.remove('open');start()};modal.onclick=e=>{if(e.target===modal)modal.classList.remove('open')};
+function start(){clearInterval(pollTimer);clearInterval(historyTimer);let c=cfg();setupNotice.style.display=c.url?'none':'block';if(!c.url){header(false,'Chưa cấu hình MQTT');return}current();history(document.querySelector('[data-hours].active').dataset.hours);pollTimer=setInterval(current,15000);historyTimer=setInterval(()=>history(document.querySelector('[data-hours].active').dataset.hours),60000)}
+navToggle.onclick=e=>{e.stopPropagation();nav.classList.toggle('open')};document.onclick=e=>{if(!nav.contains(e.target))nav.classList.remove('open')};menuRefresh.onclick=()=>{nav.classList.remove('open');current();history(document.querySelector('[data-hours].active').dataset.hours)};document.querySelector('[href="#relay"]').onclick=e=>{e.preventDefault();nav.classList.remove('open');openModal()};clock();if(!cfg().url)openModal();start();
+</script></body></html>
