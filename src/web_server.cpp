@@ -9,6 +9,7 @@
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
 #include <ElegantOTA.h>
+#include <Preferences.h>
 #include <time.h>
 
 static AsyncWebServer server(80);
@@ -86,7 +87,6 @@ void webServerInit() {
         json += "\"firmware_version\":\"" + String(FIRMWARE_VERSION) + "\",";
         json += "\"cloud_enabled\":" + String(cloudSyncIsEnabled() ? "true" : "false") + ",";
         json += "\"cloud_status\":\"" + cloudSyncGetStatusText() + "\",";
-        json += "\"mqtt_enabled\":" + String(mqttClientIsConnected() ? "true" : "false") + ",";
         json += "\"mqtt_connected\":" + String(mqttClientIsConnected() ? "true" : "false") + ",";
         json += "\"mqtt_device_id\":\"" + mqttClientGetDeviceId() + "\",";
         json += "\"mqtt_status\":\"" + mqttClientGetStatusText() + "\"";
@@ -144,6 +144,7 @@ void webServerInit() {
         uint16_t port = prefs.getUShort(PREF_KEY_MQTT_PORT, 1883);
         String user = prefs.getString(PREF_KEY_MQTT_USER, "");
         bool enabled = prefs.getBool(PREF_KEY_MQTT_ON, false);
+        bool hasPassword = prefs.getString(PREF_KEY_MQTT_PASS, "").length() > 0;
         prefs.end();
 
         String json = "{";
@@ -151,7 +152,7 @@ void webServerInit() {
         json += "\"host\":\"" + host + "\",";
         json += "\"port\":" + String(port) + ",";
         json += "\"username\":\"" + user + "\",";
-        json += "\"has_password\":" + String(prefs.getString("x", "").length() ? "true" : "false") + ",";
+        json += "\"has_password\":" + String(hasPassword ? "true" : "false") + ",";
         json += "\"connected\":" + String(mqttClientIsConnected() ? "true" : "false") + ",";
         json += "\"device_id\":\"" + mqttClientGetDeviceId() + "\",";
         json += "\"status\":\"" + mqttClientGetStatusText() + "\"";
@@ -173,7 +174,7 @@ void webServerInit() {
             request->send(400, "application/json", "{\"ok\":false,\"message\":\"Thiếu MQTT Broker\"}");
             return;
         }
-        if (port == 0 || port > 65535) {
+        if (port == 0) {
             request->send(400, "application/json", "{\"ok\":false,\"message\":\"Port MQTT không hợp lệ\"}");
             return;
         }
@@ -187,7 +188,7 @@ void webServerInit() {
         prefs.putBool(PREF_KEY_MQTT_ON, enabled);
         prefs.end();
 
-        request->send(200, "application/json", "{\"ok\":true,\"message\":\"Đã lưu MQTT. Khởi động lại ESP32 để áp dụng cấu hình mới.\"}");
+        request->send(200, "application/json", "{\"ok\":true,\"message\":\"Đã lưu MQTT. Hãy khởi động lại ESP32 để áp dụng.\"}");
     });
 
     server.onNotFound([](AsyncWebServerRequest* request) { request->send(404, "text/plain", "Khong tim thay trang."); });
