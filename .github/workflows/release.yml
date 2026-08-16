@@ -40,22 +40,20 @@ jobs:
         run: pio run -e esp32dev
 
       - name: Chuẩn bị data cho ESP32 LittleFS
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
           rm -rf .esp32-data
           cp -a data .esp32-data
-
-          # PWA chỉ dùng trên Cloudflare Pages; không đóng gói vào LittleFS ESP32.
           rm -f .esp32-data/pwa.js
 
-          # Các trang ESP32 không được phụ thuộc vào pwa.js hoặc route Cloudflare.
-          python - <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
           import re
 
           root = Path('.esp32-data')
-          script_re = re.compile(r'<script\b[^>]*\bsrc=["\']/?pwa\.js["\'][^>]*>\s*</script>', re.I)
-          route_replacements = {
+          script_re = re.compile(r'<script\b[^>]*\bsrc=["\'][^"\']*pwa\.js[^"\']*["\'][^>]*>\s*</script>\s*', re.I)
+          replacements = {
               'href="/mqtt"': 'href="/mqtt_dashboard.html"',
               "href='/mqtt'": "href='/mqtt_dashboard.html'",
               'href="/tools"': 'href="/tools.html"',
@@ -69,7 +67,7 @@ jobs:
           for path in root.rglob('*.html'):
               text = path.read_text(encoding='utf-8')
               text = script_re.sub('', text)
-              for old, new in route_replacements.items():
+              for old, new in replacements.items():
                   text = text.replace(old, new)
               path.write_text(text, encoding='utf-8')
           PY
@@ -77,11 +75,7 @@ jobs:
           echo "===== ESP32 LittleFS source ====="
           find .esp32-data -maxdepth 2 -type f -printf '%P\n' | sort
 
-          if find .esp32-data -type f -name 'pwa.js' | grep -q .; then
-            echo "::error::pwa.js vẫn còn trong data ESP32"
-            exit 1
-          fi
-
+          test ! -e .esp32-data/pwa.js
           if grep -RInF 'pwa.js' .esp32-data --include='*.html'; then
             echo "::error::HTML ESP32 vẫn gọi pwa.js"
             exit 1
@@ -93,27 +87,30 @@ jobs:
           fi
 
       - name: Build filesystem image (LittleFS - ESP32 data)
+        shell: bash
         run: |
-          set -e
-          pio run -e esp32dev -t buildfs --project-option "data_dir=.esp32-data"
+          set -euo pipefail
+
+          # PlatformIO của project này không hỗ trợ --project-option.
+          # Thay data/ tạm thời trong workspace CI để buildfs dùng đúng nguồn ESP32.
+          rm -rf .original-data
+          mv data .original-data
+          mv .esp32-data data
+          trap 'rm -rf data; mv .original-data data' EXIT
+
+          pio run -e esp32dev -t buildfs
 
           test -f .pio/build/esp32dev/littlefs.bin
           SIZE=$(stat -c '%s' .pio/build/esp32dev/littlefs.bin)
           echo "LittleFS image: ${SIZE} bytes ($(numfmt --to=iec ${SIZE}))"
 
-          # Kiểm tra kích thước theo partition thực tế thay vì hard-code 128 KiB.
           PARTITIONS=.pio/build/esp32dev/partitions.bin
-          python - "$PARTITIONS" "$SIZE" <<'PY'
+          python3 - "$PARTITIONS" "$SIZE" <<'PY'
           import struct, sys
-
           path = sys.argv[1]
           image_size = int(sys.argv[2])
           data = open(path, 'rb').read()
-          if len(data) < 32:
-              raise SystemExit('partitions.bin quá nhỏ')
-
-          max_fs_end = 0
-          found_fs = []
+          found = []
           for off in range(0, len(data) - 31, 32):
               if data[off:off+2] != b'\xAA\x50':
                   continue
@@ -122,68 +119,62 @@ jobs:
               p_offset, p_size = struct.unpack_from('<II', data, off+4)
               label = data[off+8:off+24].split(b'\0', 1)[0].decode('ascii', 'replace')
               if ptype == 0x01 and subtype in (0x82, 0x83):
-                  found_fs.append((label, p_offset, p_size))
-                  max_fs_end = max(max_fs_end, p_size)
-
-          if not found_fs:
+                  found.append((label, p_offset, p_size))
+          if not found:
               raise SystemExit('Không tìm thấy phân vùng filesystem trong partitions.bin')
-
           print('Filesystem partitions:')
-          for item in found_fs:
+          for item in found:
               print('  ', item)
-          if image_size > max_fs_end:
-              raise SystemExit(f'LittleFS image {image_size} bytes vượt phân vùng filesystem lớn nhất {max_fs_end} bytes')
-          print(f'OK: LittleFS {image_size} <= partition {max_fs_end}')
+          max_size = max(x[2] for x in found)
+          if image_size > max_size:
+              raise SystemExit(f'LittleFS image {image_size} bytes vượt partition {max_size} bytes')
+          print(f'OK: LittleFS {image_size} <= partition {max_size}')
           PY
 
       - name: Kiểm tra nội dung LittleFS
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
+          test -f .pio/build/esp32dev/littlefs.bin
+          test ! -e .esp32-data/pwa.js
           if grep -RInF 'pwa.js' .esp32-data --include='*.html' --include='*.js'; then
             echo "::error::Phát hiện pwa.js trong nguồn LittleFS ESP32"
             exit 1
           fi
-          test ! -e .esp32-data/pwa.js
 
       - name: Đọc số phiên bản từ config.h
         id: ver
+        shell: bash
         run: |
           VERSION=$(grep -oP '#define FIRMWARE_VERSION\s+"\K[^"]+' src/config.h)
+          test -n "$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Chuẩn bị file đính kèm Release
         id: files
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p release_assets
           SHORT_SHA=$(git rev-parse --short HEAD)
           TAG="v${{ steps.ver.outputs.version }}-${SHORT_SHA}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
-          cp .pio/build/esp32dev/firmware.bin \
-             "release_assets/khong-gian-xanh-firmware-v${{ steps.ver.outputs.version }}.bin"
-          cp .pio/build/esp32dev/littlefs.bin \
-             "release_assets/khong-gian-xanh-littlefs-v${{ steps.ver.outputs.version }}.bin"
+          cp .pio/build/esp32dev/firmware.bin "release_assets/khong-gian-xanh-firmware-v${{ steps.ver.outputs.version }}.bin"
+          cp .pio/build/esp32dev/littlefs.bin "release_assets/khong-gian-xanh-littlefs-v${{ steps.ver.outputs.version }}.bin"
 
       - name: Đóng gói bộ file cho esp32-android-toolkit
-        id: toolkit
         run: |
-          set -e
+          set -euo pipefail
           mkdir -p toolkit_bundle/firmware
           cp .pio/build/esp32dev/bootloader.bin toolkit_bundle/firmware/bootloader.bin
           cp .pio/build/esp32dev/partitions.bin toolkit_bundle/firmware/partitions.bin
           cp .pio/build/esp32dev/firmware.bin toolkit_bundle/firmware/firmware.bin
           cp .pio/build/esp32dev/littlefs.bin toolkit_bundle/firmware/littlefs.bin
-
           BOOT_APP0="$(find ~/.platformio/packages/framework-arduinoespressif32 -name boot_app0.bin | head -n1)"
-          if [ -z "$BOOT_APP0" ]; then
-            echo "::error::Không tìm thấy boot_app0.bin trong framework-arduinoespressif32"
-            exit 1
-          fi
+          test -n "$BOOT_APP0"
           cp "$BOOT_APP0" toolkit_bundle/firmware/boot_app0.bin
-
           cd toolkit_bundle
           zip -r "../release_assets/khong-gian-xanh-toolkit-v${{ steps.ver.outputs.version }}.zip" firmware
-          cd ..
 
       - name: Tạo Release & đính kèm file .bin
         uses: softprops/action-gh-release@v2
@@ -194,14 +185,11 @@ jobs:
             🌿 **Không Gian Xanh** - Build tự động từ commit `${{ github.sha }}`
 
             ### File đính kèm
-            - `khong-gian-xanh-firmware-v${{ steps.ver.outputs.version }}.bin` — firmware ESP32.
-            - `khong-gian-xanh-littlefs-v${{ steps.ver.outputs.version }}.bin` — LittleFS chứa giao diện Web ESP32 (`index.html`, `mqtt_dashboard.html`, `tools.html`, `wifi_config.html` và tài nguyên cần thiết). Bản ESP32 **không chứa `pwa.js`**.
-            - `khong-gian-xanh-toolkit-v${{ steps.ver.outputs.version }}.zip` — bộ 5 file cho esp32-android-toolkit/Termux.
+            - firmware ESP32
+            - LittleFS giao diện Web ESP32: index.html, mqtt_dashboard.html, tools.html, wifi_config.html và tài nguyên cần thiết
+            - Toolkit cho esp32-android-toolkit/Termux
 
-            ### Ghi chú
-            - PWA (`pwa.js`) chỉ dành cho Cloudflare Pages và không được đóng gói vào LittleFS ESP32.
-            - Chỉ cần nạp lại LittleFS khi giao diện Web phục vụ trực tiếp từ ESP32 thay đổi.
-            - Muốn tăng số phiên bản, sửa `FIRMWARE_VERSION` trong `src/config.h` trước khi push.
+            `pwa.js` chỉ dành cho Cloudflare Pages và không được đóng gói vào LittleFS ESP32.
           files: |
             release_assets/*.bin
             release_assets/*.zip
