@@ -1,54 +1,49 @@
-name: Đồng bộ header footer chung
+name: Dong bo header footer chung
 
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+on: push
 
 permissions:
   contents: write
 
 jobs:
   sync:
-    if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Lấy mã nguồn
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Chèn common.js vào toàn bộ HTML
-        shell: bash
+      - name: Them common.js vao moi HTML
         run: |
-          set -euo pipefail
-          changed=0
-          while IFS= read -r -d '' file; do
-            if ! grep -q 'src="/common.js"' "$file" && ! grep -q "src='/common.js'" "$file"; then
-              python3 - "$file" <<'PY'
-import pathlib
-import sys
-p = pathlib.Path(sys.argv[1])
-s = p.read_text(encoding='utf-8')
-marker = '<script src="/common.js"></script>'
-if marker not in s:
-    if '</body>' in s:
-        s = s.replace('</body>', marker + '</body>', 1)
-    else:
-        s += '\n' + marker + '\n'
-    p.write_text(s, encoding='utf-8')
-PY
-              changed=1
-            fi
-          done < <(find data cloud-dashboard -type f -name '*.html' -print0 2>/dev/null || true)
-          echo "COMMON_HTML_CHANGED=$changed" >> "$GITHUB_ENV"
+          python3 - <<'PY'
+          from pathlib import Path
+          changed = False
+          for root in ('data', 'cloud-dashboard'):
+              base = Path(root)
+              if not base.exists():
+                  continue
+              for path in base.rglob('*.html'):
+                  text = path.read_text(encoding='utf-8')
+                  marker = '<script src="/common.js"></script>'
+                  if marker in text:
+                      continue
+                  if '</body>' in text:
+                      text = text.replace('</body>', marker + '</body>', 1)
+                  else:
+                      text += '\n' + marker + '\n'
+                  path.write_text(text, encoding='utf-8')
+                  changed = True
+          if changed:
+              Path('/tmp/kgx_changed').write_text('1')
+          PY
 
-      - name: Commit thay đổi
-        if: ${{ env.COMMON_HTML_CHANGED == '1' }}
+      - name: Commit va push
         run: |
+          if [ ! -f /tmp/kgx_changed ]; then
+            echo "Khong co HTML nao can cap nhat."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/*.html cloud-dashboard/*.html 2>/dev/null || true
-          git commit -m "Đồng bộ header footer chung cho toàn bộ HTML"
+          git add data cloud-dashboard
+          git commit -m "Dong bo header footer chung cho toan bo HTML"
           git push
