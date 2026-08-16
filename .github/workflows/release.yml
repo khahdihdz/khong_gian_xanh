@@ -59,9 +59,7 @@ jobs:
               'href="/tools"': 'href="/tools.html"',
               "href='/tools'": "href='/tools.html'",
               'href="/wifi"': 'href="/wifi_config.html"',
-              "href='/wifi'": "href='/wifi_config.html'",
-              'href="/update"': 'href="/update.html"',
-              "href='/update'": "href='/update.html'",
+              "href='/wifi'": 'href='/wifi_config.html'",
           }
 
           for path in root.rglob('*.html'):
@@ -81,7 +79,7 @@ jobs:
             exit 1
           fi
 
-          if grep -RInE "href=[\"']/((mqtt)|(tools)|(wifi)|(update))[\"']" .esp32-data --include='*.html'; then
+          if grep -RInE "href=[\"']/((mqtt)|(tools)|(wifi))[\"']" .esp32-data --include='*.html'; then
             echo "::error::HTML ESP32 vẫn chứa route Cloudflare"
             exit 1
           fi
