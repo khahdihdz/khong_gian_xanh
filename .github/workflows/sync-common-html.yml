@@ -24,7 +24,7 @@ jobs:
           set -euo pipefail
           changed=0
           while IFS= read -r -d '' file; do
-            if ! grep -qE '<script[^>]+src=["'"']/common\.js["'"']' "$file"; then
+            if ! grep -q 'src="/common.js"' "$file" && ! grep -q "src='/common.js'" "$file"; then
               python3 - "$file" <<'PY'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1])
