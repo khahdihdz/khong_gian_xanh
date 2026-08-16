@@ -5,10 +5,13 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait-primary",
   "background_color": "#0c130c",
   "theme_color": "#0c130c",
   "lang": "vi",
+  "categories": ["utilities", "productivity"],
+  "prefer_related_applications": false,
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
@@ -16,15 +19,21 @@
   ],
   "shortcuts": [
     {
-      "name": "Chức năng",
-      "short_name": "Chức năng",
-      "url": "/tools.html",
+      "name": "Dashboard môi trường",
+      "short_name": "Dashboard",
+      "url": "/",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     },
     {
-      "name": "Cấu hình WiFi",
-      "short_name": "WiFi",
-      "url": "/wifi_config.html",
+      "name": "MQTT cá nhân",
+      "short_name": "MQTT",
+      "url": "/mqtt_dashboard.html",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Chức năng",
+      "short_name": "Chức năng",
+      "url": "/tools.html",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
