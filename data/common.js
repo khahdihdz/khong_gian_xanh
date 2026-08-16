@@ -3,7 +3,8 @@
 
   /* =========================================================
    * KHÔNG GIAN XANH - GIAO DIỆN DÙNG CHUNG
-   * Header/footer phải giống nhau trên Cloudflare Pages và ESP32.
+   * Header/footer giống nhau trên Cloudflare Pages và ESP32.
+   * Trạng thái MQTT trên header phản ánh kết nối thực tế của trang.
    * ========================================================= */
   const CSS = `
     html,body{min-height:100%;}
@@ -37,10 +38,7 @@
     document.querySelectorAll('#navMenu a').forEach(link=>{
       const raw=link.getAttribute('href')||'';
       const path=new URL(raw,location.href).pathname;
-      // Giữ tương thích với bản giao diện cũ nhưng route OTA thực tế luôn là /update.
-      const legacyOta='/update'+'.html';
-      if(path===legacyOta||path==='/update')link.setAttribute('href','/update');
-      else if(map[path])link.setAttribute('href',map[path]);
+      if(map[path])link.setAttribute('href',map[path]);
     });
   }
 
@@ -54,7 +52,51 @@
   }
 
   function loadMqttLibrary(){if(window.mqtt)return Promise.resolve(window.mqtt);if(window.__kgxMqttLoader)return window.__kgxMqttLoader;window.__kgxMqttLoader=new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://unpkg.com/mqtt/dist/mqtt.min.js';s.async=true;s.onload=()=>resolve(window.mqtt);s.onerror=reject;document.head.appendChild(s)});return window.__kgxMqttLoader}
-  async function connectHeaderMqtt(){try{let cfg={};try{cfg=JSON.parse(localStorage.getItem('kgx_mqtt_personal_v2')||'{}')}catch(e){}const pass=sessionStorage.getItem('kgx_mqtt_password_session')||'';if(!cfg.host||!cfg.device||!cfg.user||!pass){setHeaderState(false,'Chưa cấu hình MQTT');return}const mqtt=await loadMqttLibrary();if(!mqtt){setHeaderState(false,'MQTT chưa sẵn sàng');return}if(window.__kgxHeaderMqtt){try{window.__kgxHeaderMqtt.end(true)}catch(e){}}const port=Number(cfg.port)||8884,topic=`khonggianxanh/${cfg.device}/telemetry`;const client=mqtt.connect(`wss://${cfg.host}:${port}/mqtt`,{username:cfg.user,password:pass,clientId:'kgx-header-'+Math.random().toString(16).slice(2),clean:false,keepalive:30,reconnectPeriod:3000,connectTimeout:10000,resubscribe:true});window.__kgxHeaderMqtt=client;client.on('connect',()=>setHeaderState(true,'MQTT đã kết nối'));client.on('reconnect',()=>setHeaderState(false,'Đang kết nối lại MQTT...'));client.on('offline',()=>setHeaderState(false,'MQTT offline'));client.on('error',()=>setHeaderState(false,'MQTT lỗi'));client.on('message',(t,p)=>{if(t!==topic)return;try{const d=JSON.parse(p.toString()),ts=Number(d.timestamp);if(Number.isFinite(ts)&&ts>0){const clock=document.getElementById('clock');if(clock)clock.textContent=new Date(ts*1000).toLocaleTimeString('vi-VN')}}catch(e){}});client.subscribe(topic,{qos:1})}catch(e){setHeaderState(false,'MQTT không khả dụng')}}
+
+  function pageOwnsMqtt(){return !!document.querySelector('#chart,#connect,#badge')}
+
+  function syncPageMqttStatus(){
+    const badge=document.getElementById('badge');
+    if(badge){
+      const on=badge.classList.contains('online');
+      setHeaderState(on,on?'MQTT đã kết nối':'Chưa kết nối MQTT');
+      return true;
+    }
+    const status=document.getElementById('status');
+    if(status){
+      const text=(status.textContent||'').toLowerCase();
+      if(text.includes('đã kết nối')){setHeaderState(true,'MQTT đã kết nối');return true}
+      if(text.includes('mất kết nối')||text.includes('offline')||text.includes('lỗi')||text.includes('chưa đủ cấu hình')){setHeaderState(false,'MQTT chưa kết nối');return true}
+      if(text.includes('dữ liệu cảm biến thực tế')){setHeaderState(true,'MQTT đã kết nối');return true}
+      setHeaderState(false,'Đang kiểm tra MQTT');
+      return true;
+    }
+    return false;
+  }
+
+  async function connectHeaderMqtt(){
+    if(pageOwnsMqtt()){
+      syncPageMqttStatus();
+      setInterval(syncPageMqttStatus,500);
+      return;
+    }
+    try{
+      let cfg={};try{cfg=JSON.parse(localStorage.getItem('kgx_mqtt_personal_v2')||'{}')}catch(e){}
+      const pass=sessionStorage.getItem('kgx_mqtt_password_session')||'';
+      if(!cfg.host||!cfg.device||!cfg.user||!pass){setHeaderState(false,'Chưa cấu hình MQTT');return}
+      const mqtt=await loadMqttLibrary();if(!mqtt){setHeaderState(false,'MQTT chưa sẵn sàng');return}
+      if(window.__kgxHeaderMqtt){try{window.__kgxHeaderMqtt.end(true)}catch(e){}}
+      const port=Number(cfg.port)||8884,topic=`khonggianxanh/${cfg.device}/telemetry`;
+      const client=mqtt.connect(`wss://${cfg.host}:${port}/mqtt`,{username:cfg.user,password:pass,clientId:'kgx-header-'+Math.random().toString(16).slice(2),clean:false,keepalive:30,reconnectPeriod:3000,connectTimeout:10000,resubscribe:true});
+      window.__kgxHeaderMqtt=client;
+      client.on('connect',()=>setHeaderState(true,'MQTT đã kết nối'));
+      client.on('reconnect',()=>setHeaderState(false,'Đang kết nối lại MQTT...'));
+      client.on('offline',()=>setHeaderState(false,'MQTT offline'));
+      client.on('error',()=>setHeaderState(false,'MQTT lỗi'));
+      client.on('message',(t,p)=>{if(t!==topic)return;try{const d=JSON.parse(p.toString()),ts=Number(d.timestamp);if(Number.isFinite(ts)&&ts>0){const clock=document.getElementById('clock');if(clock)clock.textContent=new Date(ts*1000).toLocaleTimeString('vi-VN')}}catch(e){}});
+      client.subscribe(topic,{qos:1});
+    }catch(e){setHeaderState(false,'MQTT không khả dụng')}
+  }
 
   async function init(){
     installCss();document.body.classList.add('kgx-common-layout');
