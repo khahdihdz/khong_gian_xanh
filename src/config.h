@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 #define PROJECT_NAME    "Không Gian Xanh"
-#define FIRMWARE_VERSION "1.2.0"
+#define FIRMWARE_VERSION "1.3.0"
 
 #define I2C_SDA_PIN     21
 #define I2C_SCL_PIN     22
@@ -52,14 +52,14 @@
 #define CLOUD_SYNC_INTERVAL_MS   60000UL
 #define CLOUD_SYNC_TIMEOUT_MS    8000UL
 
-// ============================================================
 // MQTT
-// ============================================================
 #define PREF_KEY_MQTT_HOST  "mqtt_host"
 #define PREF_KEY_MQTT_PORT  "mqtt_port"
 #define PREF_KEY_MQTT_USER  "mqtt_user"
 #define PREF_KEY_MQTT_PASS  "mqtt_pass"
 #define PREF_KEY_MQTT_ON    "mqtt_on"
+#define PREF_KEY_MQTT_TLS   "mqtt_tls"
+#define PREF_KEY_MQTT_CA    "mqtt_ca"
 
 #define MQTT_RECONNECT_INTERVAL_MS 10000UL
 #define MQTT_PUBLISH_INTERVAL_MS   10000UL
