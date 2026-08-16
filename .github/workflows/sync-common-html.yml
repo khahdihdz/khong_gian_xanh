@@ -12,16 +12,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Them common.js vao moi HTML
+      - name: Them common.js vao moi trang HTML
         run: |
           python3 - <<'PY'
           from pathlib import Path
           changed = False
-          for root in ('data', 'cloud-dashboard'):
-              base = Path(root)
+          roots = [Path('data'), Path('cloud-dashboard')]
+          excluded = {'header.html', 'footer.html'}
+          for base in roots:
               if not base.exists():
                   continue
               for path in base.rglob('*.html'):
+                  if path.name in excluded:
+                      continue
                   text = path.read_text(encoding='utf-8')
                   marker = '<script src="/common.js"></script>'
                   if marker in text:
