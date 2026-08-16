@@ -53,7 +53,7 @@ void webServerInit() {
     });
     server.on("/api/info", HTTP_GET, [](AsyncWebServerRequest* request) {
         String json = "{";
-        json += "\"project\":\"" + String(PROJECT_NAME) + "\",\"chip\":\"ESP32\",\"free_heap\":" + String(ESP.getFreeHeap()) + ",\"uptime_ms\":" + String(millis()) + ",";
+        json += "\"ok\":true,\"project\":\"" + String(PROJECT_NAME) + "\",\"chip\":\"ESP32\",\"free_heap\":" + String(ESP.getFreeHeap()) + ",\"uptime_ms\":" + String(millis()) + ",";
         json += "\"wifi_status\":\"" + wifiManagerGetStateText() + "\",\"ip\":\"" + wifiManagerGetIP() + "\",\"rssi\":" + String(wifiManagerGetRSSI()) + ",";
         json += "\"record_count\":" + String((int)storageGetRecordCount()) + ",\"firmware_version\":\"" + String(FIRMWARE_VERSION) + "\",\"cloud_enabled\":" + String(cloudSyncIsEnabled() ? "true" : "false") + ",";
         json += "\"cloud_status\":\"" + cloudSyncGetStatusText() + "\",\"mqtt_connected\":" + String(mqttClientIsConnected() ? "true" : "false") + ",\"mqtt_device_id\":\"" + mqttClientGetDeviceId() + "\",\"mqtt_status\":\"" + mqttClientGetStatusText() + "\"}";
@@ -61,11 +61,14 @@ void webServerInit() {
     });
 
     server.on("/api/wifi-config", HTTP_POST, [](AsyncWebServerRequest* request) {
-        String ssid, pass; if (request->hasParam("ssid", true)) ssid = request->getParam("ssid", true)->value(); if (request->hasParam("password", true)) pass = request->getParam("password", true)->value();
+        String ssid, pass;
+        if (request->hasParam("ssid", true)) ssid = request->getParam("ssid", true)->value();
+        if (request->hasParam("password", true)) pass = request->getParam("password", true)->value();
         if (!ssid.length()) { request->send(400, "application/json", "{\"ok\":false,\"message\":\"Thiếu SSID\"}"); return; }
-        wifiManagerSaveCredentials(ssid, pass); request->send(200, "application/json", "{\"ok\":true,\"message\":\"Đã lưu, đang thử kết nối...\"}");
+        bool ok = wifiManagerSaveCredentials(ssid, pass);
+        request->send(ok ? 200 : 400, "application/json", ok ? "{\"ok\":true,\"message\":\"Đã lưu WiFi và bắt đầu kết nối.\"}" : "{\"ok\":false,\"message\":\"Không lưu được WiFi.\"}");
     });
-    server.on("/api/wifi-reset", HTTP_POST, [](AsyncWebServerRequest* request) { wifiManagerReset(); request->send(200, "application/json", "{\"ok\":true}"); });
+    server.on("/api/wifi-reset", HTTP_POST, [](AsyncWebServerRequest* request) { wifiManagerReset(); request->send(200, "application/json", "{\"ok\":true,\"message\":\"Đã xóa cấu hình WiFi và chuyển sang AP.\"}"); });
 
     server.on("/api/cloud-config", HTTP_GET, [](AsyncWebServerRequest* request) {
         String json = "{\"enabled\":" + String(cloudSyncIsEnabled() ? "true" : "false") + ",\"url\":\"" + cloudSyncGetUrl() + "\",\"has_token\":" + String(cloudSyncHasToken() ? "true" : "false") + ",\"status\":\"" + cloudSyncGetStatusText() + "\"}";
@@ -84,7 +87,7 @@ void webServerInit() {
         String user = prefs.getString(PREF_KEY_MQTT_USER, ""); bool enabled = prefs.getBool(PREF_KEY_MQTT_ON, false);
         bool tls = prefs.getBool(PREF_KEY_MQTT_TLS, true); bool hasPassword = prefs.getString(PREF_KEY_MQTT_PASS, "").length() > 0; bool hasCa = prefs.getString(PREF_KEY_MQTT_CA, "").length() > 0;
         prefs.end();
-        String json = "{\"enabled\":" + String(enabled ? "true" : "false") + ",\"tls\":" + String(tls ? "true" : "false") + ",\"host\":\"" + host + "\",\"port\":" + String(port) + ",\"username\":\"" + user + "\",\"has_password\":" + String(hasPassword ? "true" : "false") + ",\"has_ca\":" + String(hasCa ? "true" : "false") + ",\"connected\":" + String(mqttClientIsConnected() ? "true" : "false") + ",\"device_id\":\"" + mqttClientGetDeviceId() + "\",\"status\":\"" + mqttClientGetStatusText() + "\"}";
+        String json = "{\"ok\":true,\"enabled\":" + String(enabled ? "true" : "false") + ",\"tls\":" + String(tls ? "true" : "false") + ",\"host\":\"" + host + "\",\"port\":" + String(port) + ",\"username\":\"" + user + "\",\"has_password\":" + String(hasPassword ? "true" : "false") + ",\"has_ca\":" + String(hasCa ? "true" : "false") + ",\"connected\":" + String(mqttClientIsConnected() ? "true" : "false") + ",\"device_id\":\"" + mqttClientGetDeviceId() + "\",\"status\":\"" + mqttClientGetStatusText() + "\"}";
         request->send(200, "application/json", json);
     });
 
@@ -98,7 +101,7 @@ void webServerInit() {
         if (request->hasParam("enabled", true)) enabled = request->getParam("enabled", true)->value() == "1";
         if (request->hasParam("tls", true)) tls = request->getParam("tls", true)->value() == "1";
         if (!host.length()) { request->send(400, "application/json", "{\"ok\":false,\"message\":\"Thiếu MQTT Broker\"}"); return; }
-        if (port == 0) { request->send(400, "application/json", "{\"ok\":false,\"message\":\"Port MQTT không hợp lệ\"}"); return; }
+        if (port == 0 || port > 65535) { request->send(400, "application/json", "{\"ok\":false,\"message\":\"Port MQTT không hợp lệ\"}"); return; }
 
         Preferences prefs; prefs.begin(PREF_NAMESPACE, false);
         prefs.putString(PREF_KEY_MQTT_HOST, host); prefs.putUShort(PREF_KEY_MQTT_PORT, port); prefs.putString(PREF_KEY_MQTT_USER, user);
@@ -106,9 +109,15 @@ void webServerInit() {
         if (ca.length()) prefs.putString(PREF_KEY_MQTT_CA, ca);
         prefs.putBool(PREF_KEY_MQTT_ON, enabled); prefs.putBool(PREF_KEY_MQTT_TLS, tls); prefs.end();
 
-        bool connected = mqttClientReloadConfig();
-        String message = connected ? "Đã lưu và kết nối MQTT thành công." : (enabled ? "Đã lưu. Kiểm tra trạng thái MQTT và CA certificate." : "Đã lưu và tắt MQTT.");
-        String json = "{\"ok\":true,\"connected\":" + String(connected ? "true" : "false") + ",\"message\":\"" + message + "\"}";
+        bool started = mqttClientReloadConfig();
+        String message = !enabled ? "Đã lưu và tắt MQTT." : (started ? "Đã lưu cấu hình và bắt đầu kết nối MQTT." : "Đã lưu nhưng chưa thể bắt đầu kết nối. Kiểm tra WiFi, Broker và CA.");
+        String json = "{\"ok\":true,\"started\":" + String(started ? "true" : "false") + ",\"connected\":" + String(mqttClientIsConnected() ? "true" : "false") + ",\"message\":\"" + message + "\"}";
+        request->send(200, "application/json", json);
+    });
+
+    server.on("/api/mqtt-test", HTTP_POST, [](AsyncWebServerRequest* request) {
+        bool started = mqttClientReconnectNow();
+        String json = "{\"ok\":true,\"started\":" + String(started ? "true" : "false") + ",\"connected\":" + String(mqttClientIsConnected() ? "true" : "false") + ",\"status\":\"" + mqttClientGetStatusText() + "\"}";
         request->send(200, "application/json", json);
     });
 
