@@ -57,16 +57,33 @@ jobs:
               r'<script[^>]+src=["\']/pwa\.js(?:\?[^"\']*)?["\'][^>]*>\s*</script>',
               re.IGNORECASE,
           )
+          common_re = re.compile(
+              r'<script[^>]+src=["\']/common\.js(?:\?[^"\']*)?["\'][^>]*>\s*</script>',
+              re.IGNORECASE,
+          )
 
           for path in root.rglob("*.html"):
               text = path.read_text(encoding="utf-8")
               text = pwa_re.sub("", text)
+              text = common_re.sub("", text)
 
               for old, new in replacements.items():
                   text = text.replace(f'href="{old}"', f'href="{new}"')
                   text = text.replace(f"href='{old}'", f'href="{new}"')
                   text = text.replace(f'action="{old}"', f'action="{new}"')
                   text = text.replace(f"action='{old}'", f'action="{new}"')
+
+              # Header/footer dùng chung được tải từ LittleFS.
+              if "</body>" in text.lower():
+                  text = re.sub(
+                      r'</body>',
+                      '<script src="/common.js"></script></body>',
+                      text,
+                      count=1,
+                      flags=re.IGNORECASE,
+                  )
+              else:
+                  text += '<script src="/common.js"></script>'
 
               path.write_text(text, encoding="utf-8")
 
