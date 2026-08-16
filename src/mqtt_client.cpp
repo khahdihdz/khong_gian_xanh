@@ -115,7 +115,12 @@ static bool connectMqtt() {
     if (WiFi.status() != WL_CONNECTED) { s_statusText = "Chờ WiFi kết nối"; return false; }
 
     // connected() chỉ true sau CONNACK; connect() chỉ bắt đầu quá trình kết nối.
-    if (!s_mqtt.disconnected()) return true;
+    // disconnected() == false còn có thể là trạng thái đang kết nối, vì vậy
+    // không được coi nó là kết nối thành công để xử lý nút Kiểm tra.
+    if (!s_mqtt.disconnected()) {
+        s_statusText = "MQTT đang kết nối...";
+        return true;
+    }
     if (!configureClient()) return false;
 
     s_statusText = "MQTT đang kết nối...";
@@ -129,7 +134,7 @@ static bool connectMqtt() {
     return true;
 }
 
-void mqttClientInit() {
+mqttClientInit() {
     uint64_t mac = ESP.getEfuseMac();
     s_deviceId = String("esp32-") + String((uint32_t)(mac >> 24), HEX) + String((uint32_t)mac, HEX);
     s_deviceId.toLowerCase();
@@ -139,9 +144,12 @@ void mqttClientInit() {
 }
 
 bool mqttClientReloadConfig() {
-    if (s_mqtt.connected()) {
-        s_mqtt.publish((topicBase() + "/status").c_str(), 1, true, "offline");
+    // Khi reload cấu hình, client có thể đang ở trạng thái connecting. Phải
+    // ngắt hẳn phiên cũ trước khi bắt đầu phiên mới, nếu không connect() mới
+    // sẽ bị bỏ qua và nút "Lưu & kết nối" báo thành công giả.
+    if (!s_mqtt.disconnected()) {
         s_mqtt.disconnect(true);
+        delay(50);
     }
     loadConfig();
     s_lastReconnectMs = 0;
@@ -156,7 +164,13 @@ bool mqttClientReloadConfig() {
 }
 
 bool mqttClientReconnectNow() {
-    if (s_mqtt.connected()) s_mqtt.disconnect(true);
+    // Luôn tạo một phiên kết nối mới, kể cả khi client đang ở trạng thái
+    // connecting. Đây là trường hợp làm nút "Kết nối / kiểm tra" trước đó
+    // có thể không thực sự gọi connect() lần mới.
+    if (!s_mqtt.disconnected()) {
+        s_mqtt.disconnect(true);
+        delay(50);
+    }
     s_lastReconnectMs = 0;
     return connectMqtt();
 }
