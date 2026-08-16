@@ -50,9 +50,30 @@ jobs:
           rm -f .esp32-data/pwa.js
 
           # Các trang ESP32 không được phụ thuộc vào pwa.js.
-          find .esp32-data -type f -name '*.html' -print0 | xargs -0 sed -i \
-            -e '/<script[^>]*src=["'"']\/pwa\.js["'"'][^>]*><\/script>/d' \
-            -e '/<script[^>]*src=["'"']pwa\.js["'"'][^>]*><\/script>/d'
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('.esp32-data')
+          script_re = re.compile(r'<script\b[^>]*\bsrc=["\']/?pwa\.js["\'][^>]*>\s*</script>', re.I)
+          route_replacements = {
+              'href="/mqtt"': 'href="/mqtt_dashboard.html"',
+              "href='/mqtt'": "href='/mqtt_dashboard.html'",
+              'href="/tools"': 'href="/tools.html"',
+              "href='/tools'": "href='/tools.html'",
+              'href="/wifi"': 'href="/wifi_config.html"',
+              "href='/wifi'": "href='/wifi_config.html'",
+              'href="/update"': 'href="/update.html"',
+              "href='/update'": "href='/update.html'",
+          }
+
+          for path in root.rglob('*.html'):
+              text = path.read_text(encoding='utf-8')
+              text = script_re.sub('', text)
+              for old, new in route_replacements.items():
+                  text = text.replace(old, new)
+              path.write_text(text, encoding='utf-8')
+          PY
 
           echo "===== ESP32 LittleFS source ====="
           find .esp32-data -maxdepth 2 -type f -printf '%P\n' | sort
@@ -62,7 +83,7 @@ jobs:
             exit 1
           fi
 
-          if grep -RInE 'src=["'"']/?pwa\.js|href=["'"']/mqtt$|href=["'"']/tools$|href=["'"']/wifi$' .esp32-data --include='*.html'; then
+          if grep -RInE 'pwa\.js|href=["'"']/mqtt$|href=["'"']/tools$|href=["'"']/wifi$|href=["'"']/update$' .esp32-data --include='*.html'; then
             echo "::error::HTML ESP32 vẫn chứa liên kết phụ thuộc route Cloudflare/PWA"
             exit 1
           fi
@@ -115,7 +136,7 @@ jobs:
       - name: Kiểm tra nội dung LittleFS
         run: |
           set -e
-          if grep -RInE 'pwa\.js' .esp32-data --include='*.html' --include='*.js' || true; then
+          if grep -RInE 'pwa\.js' .esp32-data --include='*.html' --include='*.js'; then
             echo "::error::Phát hiện pwa.js trong nguồn LittleFS ESP32"
             exit 1
           fi
