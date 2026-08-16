@@ -60,10 +60,13 @@ static void onConnect(bool sessionPresent) {
     s_mqtt.subscribe((base + "/command").c_str(), 1);
     s_mqtt.subscribe((base + "/config").c_str(), 1);
     s_statusText = sessionPresent ? "MQTT TLS đã kết nối (session cũ)" : "MQTT TLS đã kết nối";
+    Serial.printf("[MQTT] ĐÃ KẾT NỐI HiveMQ: %s:%u\n", s_host.c_str(), s_port);
+    Serial.printf("[MQTT] Device ID: %s\n", s_deviceId.c_str());
 }
 
 static void onDisconnect(espMqttClientTypes::DisconnectReason reason) {
-    s_statusText = "MQTT ngắt kết nối: " + String((int)reason);
+    s_statusText = "MQTT ngắt kết nối, mã lỗi: " + String((int)reason);
+    Serial.printf("[MQTT] NGẮT KẾT NỐI, mã lỗi: %d\n", (int)reason);
 }
 
 static void onMessage(const espMqttClientTypes::MessageProperties& properties, const char* topic,
@@ -79,7 +82,12 @@ static void onMessage(const espMqttClientTypes::MessageProperties& properties, c
 }
 
 static bool configureClient() {
-    if (!s_host.length()) return false;
+    if (!s_host.length()) { s_statusText = "Thiếu MQTT Broker"; return false; }
+
+    // Đăng ký callback trước khi connect để không bỏ lỡ sự kiện.
+    s_mqtt.onConnect(onConnect);
+    s_mqtt.onDisconnect(onDisconnect);
+    s_mqtt.onMessage(onMessage);
 
     s_mqtt.setClientId(s_deviceId.c_str());
     s_mqtt.setCleanSession(false);
@@ -92,27 +100,33 @@ static bool configureClient() {
     s_mqtt.setWill(willTopic.c_str(), 1, true, "offline");
 
     if (s_tls) {
-        if (!s_ca.length()) {
-            s_statusText = "MQTT TLS chưa có CA certificate";
+        if (!s_ca.length()) { s_statusText = "MQTT TLS chưa có CA certificate"; return false; }
+        if (!s_ca.startsWith("-----BEGIN CERTIFICATE-----")) {
+            s_statusText = "CA certificate không đúng định dạng PEM";
             return false;
         }
         s_mqtt.setCACert(s_ca.c_str());
     }
-
-    s_mqtt.onConnect(onConnect);
-    s_mqtt.onDisconnect(onDisconnect);
-    s_mqtt.onMessage(onMessage);
     return true;
 }
 
 static bool connectMqtt() {
     if (!s_enabled || !s_host.length()) return false;
-    if (WiFi.status() != WL_CONNECTED) return false;
+    if (WiFi.status() != WL_CONNECTED) { s_statusText = "Chờ WiFi kết nối"; return false; }
+
+    // connected() chỉ true sau CONNACK; connect() chỉ bắt đầu quá trình kết nối.
+    if (!s_mqtt.disconnected()) return true;
     if (!configureClient()) return false;
-    bool ok = s_mqtt.connect();
-    if (!ok) s_statusText = "MQTT không thể bắt đầu kết nối";
-    else s_statusText = "MQTT đang kết nối...";
-    return ok;
+
+    s_statusText = "MQTT đang kết nối...";
+    bool started = s_mqtt.connect();
+    if (!started) {
+        s_statusText = "MQTT không thể bắt đầu kết nối";
+        Serial.println("[MQTT] Không thể bắt đầu connect()");
+        return false;
+    }
+    Serial.printf("[MQTT] Đã bắt đầu kết nối tới %s:%u (TLS=%s)\n", s_host.c_str(), s_port, s_tls ? "ON" : "OFF");
+    return true;
 }
 
 void mqttClientInit() {
@@ -136,6 +150,8 @@ bool mqttClientReloadConfig() {
         s_statusText = "MQTT đang tắt hoặc chưa cấu hình";
         return true;
     }
+    // true ở đây chỉ có nghĩa là đã khởi động quá trình kết nối.
+    // Trạng thái kết nối thật được cập nhật bởi onConnect().
     return connectMqtt();
 }
 
@@ -150,6 +166,8 @@ void mqttClientLoop(const SensorData& data) {
     if (wifiManagerGetState() != WIFI_STATE_CONNECTED) return;
 
     if (!s_mqtt.connected()) {
+        // Không gọi connect() lặp khi client đang connecting/disconnecting.
+        if (!s_mqtt.disconnected()) return;
         unsigned long now = millis();
         if (now - s_lastReconnectMs < MQTT_RECONNECT_INTERVAL_MS) return;
         s_lastReconnectMs = now;
@@ -157,13 +175,16 @@ void mqttClientLoop(const SensorData& data) {
         return;
     }
 
-    s_mqtt.loop();
+    // espMqttClient trên ESP32 mặc định dùng internal task.
     unsigned long now = millis();
     if (now - s_lastPublishMs >= MQTT_PUBLISH_INTERVAL_MS) {
         s_lastPublishMs = now;
         String payload = makeTelemetry(data);
         if (s_mqtt.publish((topicBase() + "/telemetry").c_str(), 1, false, payload.c_str())) {
             s_statusText = "MQTT TLS: đã gửi telemetry QoS 1";
+            Serial.println("[MQTT] Đã publish telemetry QoS 1");
+        } else {
+            s_statusText = "MQTT đã kết nối nhưng publish thất bại";
         }
     }
 }
