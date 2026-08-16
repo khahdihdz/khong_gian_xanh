@@ -40,12 +40,9 @@ jobs:
             '/tools':'/tools.html',
             '/wifi':'/wifi_config.html',
             '/update':'/update',
-            '/mqtt_dashboard.html':'/mqtt_dashboard.html',
-            '/tools.html':'/tools.html',
-            '/wifi_config.html':'/wifi_config.html',
           }
-          pwa_re=re.compile(r'<script[^>]+src=["\']/pwa\\.js(?:\\?[^"\']*)?["\'][^>]*>\\s*</script>',re.I)
-          common_re=re.compile(r'<script[^>]+src=["\']/common\\.js(?:\\?[^"\']*)?["\'][^>]*>\\s*</script>',re.I)
+          pwa_re=re.compile(r'<script[^>]+src=["\']/pwa\.js(?:\?[^"\']*)?["\'][^>]*>\s*</script>',re.I)
+          common_re=re.compile(r'<script[^>]+src=["\']/common\.js(?:\?[^"\']*)?["\'][^>]*>\s*</script>',re.I)
           for path in root.rglob('*.html'):
             text=path.read_text(encoding='utf-8')
             text=pwa_re.sub('',text)
@@ -55,7 +52,6 @@ jobs:
               text=text.replace(f"href='{old}'",f'href="{new}"')
               text=text.replace(f'action="{old}"',f'action="{new}"')
               text=text.replace(f"action='{old}'",f'action="{new}"')
-            text=re.sub(r'<script[^>]+src=["\']/pwa\\.js[^>]*>\\s*</script>','',text,flags=re.I)
             if '</body>' in text.lower():
               text=re.sub(r'</body>','<script src="/common.js"></script></body>',text,count=1,flags=re.I)
             else:
