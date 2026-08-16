@@ -2,7 +2,8 @@ name: Đồng bộ header footer chung
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -10,7 +11,7 @@ permissions:
 
 jobs:
   sync:
-    if: github.actor != 'github-actions[bot]'
+    if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Lấy mã nguồn
@@ -26,7 +27,8 @@ jobs:
           while IFS= read -r -d '' file; do
             if ! grep -q 'src="/common.js"' "$file" && ! grep -q "src='/common.js'" "$file"; then
               python3 - "$file" <<'PY'
-import pathlib, sys
+import pathlib
+import sys
 p = pathlib.Path(sys.argv[1])
 s = p.read_text(encoding='utf-8')
 marker = '<script src="/common.js"></script>'
@@ -40,14 +42,10 @@ PY
               changed=1
             fi
           done < <(find data cloud-dashboard -type f -name '*.html' -print0 2>/dev/null || true)
-          if [ "$changed" = "1" ]; then
-            echo "COMMON_HTML_CHANGED=1" >> "$GITHUB_ENV"
-          else
-            echo "COMMON_HTML_CHANGED=0" >> "$GITHUB_ENV"
-          fi
+          echo "COMMON_HTML_CHANGED=$changed" >> "$GITHUB_ENV"
 
       - name: Commit thay đổi
-        if: env.COMMON_HTML_CHANGED == '1'
+        if: ${{ env.COMMON_HTML_CHANGED == '1' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
