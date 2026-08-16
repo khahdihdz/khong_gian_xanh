@@ -35,18 +35,48 @@ jobs:
           rm -rf esp32-data
           cp -a data esp32-data
 
+          # Dùng Python để xử lý HTML, tránh lỗi quote/regex của Bash/sed.
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path("esp32-data")
+
           # PWA chỉ dành cho Cloudflare Pages, không đóng gói vào LittleFS ESP32.
-          rm -f esp32-data/pwa.js
+          (root / "pwa.js").unlink(missing_ok=True)
 
           # ESP32 dùng file HTML trực tiếp thay vì route rewrite của Cloudflare Pages.
-          find esp32-data -type f -name '*.html' -print0 | while IFS= read -r -d '' f; do
-            sed -i '/<script[[:space:]]\+src=["'"']\/pwa\.js["'"'][^>]*><\/script>/d' "$f"
-            sed -i 's#href=["'"']/mqtt["'"']#href="/mqtt_dashboard.html"#g' "$f"
-            sed -i 's#href=["'"']/tools["'"']#href="/tools.html"#g' "$f"
-            sed -i 's#href=["'"']/wifi["'"']#href="/wifi_config.html"#g' "$f"
-            sed -i 's#href=["'"']/update["'"']#href="/update.html"#g' "$f"
-          done
+          replacements = {
+              "/mqtt": "/mqtt_dashboard.html",
+              "/tools": "/tools.html",
+              "/wifi": "/wifi_config.html",
+              "/update": "/update.html",
+          }
 
+          pwa_re = re.compile(
+              r'<script[^>]+src=["\']/pwa\.js(?:\?[^"\']*)?["\'][^>]*>\s*</script>',
+              re.IGNORECASE,
+          )
+
+          for path in root.rglob("*.html"):
+              text = path.read_text(encoding="utf-8")
+              text = pwa_re.sub("", text)
+
+              for old, new in replacements.items():
+                  text = text.replace(f'href="{old}"', f'href="{new}"')
+                  text = text.replace(f"href='{old}'", f'href="{new}"')
+                  text = text.replace(f'action="{old}"', f'action="{new}"')
+                  text = text.replace(f"action='{old}'", f'action="{new}"')
+
+              path.write_text(text, encoding="utf-8")
+
+          print("===== ESP32 LittleFS source =====")
+          for path in sorted(root.rglob("*")):
+              if path.is_file():
+                  print(path.relative_to(root))
+          PY
+
+          # ESP32 LittleFS phải dùng thư mục data mặc định của PlatformIO.
           rm -rf data
           mv esp32-data data
 
@@ -62,7 +92,6 @@ jobs:
           SIZE=$(stat -c%s "$IMG")
           echo "LittleFS image: $IMG"
           echo "Size: $SIZE bytes ($(numfmt --to=iec-i --suffix=B "$SIZE"))"
-          # Không cho phép image vượt quá 128 KiB của image LittleFS cũ mà người dùng đang sử dụng.
           if [ "$SIZE" -gt 131072 ]; then
             echo "ERROR: LittleFS image vượt 128 KiB (131072 bytes)."
             exit 1
