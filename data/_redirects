@@ -1,0 +1,4 @@
+/mqtt /mqtt_dashboard.html 200
+/tools /tools.html 200
+/wifi /wifi_config.html 200
+/update /update.html 200
