@@ -41,14 +41,15 @@ static String makeTelemetry(const SensorData& d) {
     json += "\"device_id\":\"" + s_deviceId + "\",";
     json += "\"temperature\":" + String(d.sht31Ok ? d.temperature : -99, 1) + ",";
     json += "\"humidity\":" + String(d.sht31Ok ? d.humidity : -1, 1) + ",";
-    json += "\"tvoc\":" + String(d.tvoc) + ",";
-    json += "\"eco2\":" + String(d.eco2) + ",";
-    json += "\"aqi\":" + String(d.aqi) + ",";
+    json += "\"tvoc\":" + String(d.ens160Ok ? d.tvoc : -1) + ",";
+    json += "\"eco2\":" + String(d.ens160Ok ? d.eco2 : -1) + ",";
+    json += "\"aqi\":" + String(d.ens160Ok ? d.aqi : -1) + ",";
     json += "\"status\":\"" + d.aqiLabel + "\",";
     json += "\"sht31_ok\":" + String(d.sht31Ok ? "true" : "false") + ",";
     json += "\"ens160_ok\":" + String(d.ens160Ok ? "true" : "false") + ",";
     json += "\"warning\":" + String(d.warning ? "true" : "false") + ",";
     json += "\"warning_reason\":\"" + d.warningReason + "\",";
+    json += "\"wifi_rssi\":" + String(WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : -127) + ",";
     json += "\"timestamp\":" + String((uint32_t)now) + "}";
     return json;
 }
@@ -107,8 +108,6 @@ static bool configureClient() {
     return true;
 }
 
-// Force disconnect() là bất đồng bộ. Phải chờ state thực sự về disconnected
-// trước khi gọi connect(), nếu không nút Kiểm tra có thể chỉ nối lại phiên cũ.
 static bool stopClientAndWait() {
     if (s_mqtt.disconnected()) return true;
     s_mqtt.disconnect(true);
