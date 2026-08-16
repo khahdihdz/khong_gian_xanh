@@ -15,91 +15,60 @@ permissions:
 jobs:
   build-littlefs:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-
       - name: Install PlatformIO
         run: python -m pip install --upgrade platformio
-
       - name: Prepare ESP32 LittleFS web files
         shell: bash
         run: |
           set -euo pipefail
           rm -rf esp32-data
           cp -a data esp32-data
-
-          # Dùng Python để xử lý HTML, tránh lỗi quote/regex của Bash/sed.
           python - <<'PY'
           from pathlib import Path
           import re
-
-          root = Path("esp32-data")
-
-          # PWA chỉ dành cho Cloudflare Pages, không đóng gói vào LittleFS ESP32.
-          (root / "pwa.js").unlink(missing_ok=True)
-
-          # ESP32 dùng file HTML trực tiếp thay vì route rewrite của Cloudflare Pages.
-          replacements = {
-              "/mqtt": "/mqtt_dashboard.html",
-              "/tools": "/tools.html",
-              "/wifi": "/wifi_config.html",
-              "/update": "/update.html",
+          root=Path('esp32-data')
+          (root/'pwa.js').unlink(missing_ok=True)
+          replacements={
+            '/mqtt':'/mqtt_dashboard.html',
+            '/tools':'/tools.html',
+            '/wifi':'/wifi_config.html',
+            '/update':'/update',
+            '/mqtt_dashboard.html':'/mqtt_dashboard.html',
+            '/tools.html':'/tools.html',
+            '/wifi_config.html':'/wifi_config.html',
           }
-
-          pwa_re = re.compile(
-              r'<script[^>]+src=["\']/pwa\.js(?:\?[^"\']*)?["\'][^>]*>\s*</script>',
-              re.IGNORECASE,
-          )
-          common_re = re.compile(
-              r'<script[^>]+src=["\']/common\.js(?:\?[^"\']*)?["\'][^>]*>\s*</script>',
-              re.IGNORECASE,
-          )
-
-          for path in root.rglob("*.html"):
-              text = path.read_text(encoding="utf-8")
-              text = pwa_re.sub("", text)
-              text = common_re.sub("", text)
-
-              for old, new in replacements.items():
-                  text = text.replace(f'href="{old}"', f'href="{new}"')
-                  text = text.replace(f"href='{old}'", f'href="{new}"')
-                  text = text.replace(f'action="{old}"', f'action="{new}"')
-                  text = text.replace(f"action='{old}'", f'action="{new}"')
-
-              # Header/footer dùng chung được tải từ LittleFS.
-              if "</body>" in text.lower():
-                  text = re.sub(
-                      r'</body>',
-                      '<script src="/common.js"></script></body>',
-                      text,
-                      count=1,
-                      flags=re.IGNORECASE,
-                  )
-              else:
-                  text += '<script src="/common.js"></script>'
-
-              path.write_text(text, encoding="utf-8")
-
-          print("===== ESP32 LittleFS source =====")
-          for path in sorted(root.rglob("*")):
-              if path.is_file():
-                  print(path.relative_to(root))
+          pwa_re=re.compile(r'<script[^>]+src=["\']/pwa\\.js(?:\\?[^"\']*)?["\'][^>]*>\\s*</script>',re.I)
+          common_re=re.compile(r'<script[^>]+src=["\']/common\\.js(?:\\?[^"\']*)?["\'][^>]*>\\s*</script>',re.I)
+          for path in root.rglob('*.html'):
+            text=path.read_text(encoding='utf-8')
+            text=pwa_re.sub('',text)
+            text=common_re.sub('',text)
+            for old,new in replacements.items():
+              text=text.replace(f'href="{old}"',f'href="{new}"')
+              text=text.replace(f"href='{old}'",f'href="{new}"')
+              text=text.replace(f'action="{old}"',f'action="{new}"')
+              text=text.replace(f"action='{old}'",f'action="{new}"')
+            text=re.sub(r'<script[^>]+src=["\']/pwa\\.js[^>]*>\\s*</script>','',text,flags=re.I)
+            if '</body>' in text.lower():
+              text=re.sub(r'</body>','<script src="/common.js"></script></body>',text,count=1,flags=re.I)
+            else:
+              text+='<script src="/common.js"></script>'
+            path.write_text(text,encoding='utf-8')
+          print('===== ESP32 LittleFS source =====')
+          for path in sorted(root.rglob('*')):
+            if path.is_file(): print(path.relative_to(root))
           PY
-
-          # ESP32 LittleFS phải dùng thư mục data mặc định của PlatformIO.
           rm -rf data
           mv esp32-data data
-
       - name: Build LittleFS image
         run: pio run -e esp32dev -t buildfs
-
       - name: Verify image size
         shell: bash
         run: |
@@ -109,11 +78,7 @@ jobs:
           SIZE=$(stat -c%s "$IMG")
           echo "LittleFS image: $IMG"
           echo "Size: $SIZE bytes ($(numfmt --to=iec-i --suffix=B "$SIZE"))"
-          if [ "$SIZE" -gt 131072 ]; then
-            echo "ERROR: LittleFS image vượt 128 KiB (131072 bytes)."
-            exit 1
-          fi
-
+          if [ "$SIZE" -gt 131072 ]; then echo "ERROR: LittleFS image vượt 128 KiB (131072 bytes)."; exit 1; fi
       - name: Prepare artifact
         shell: bash
         run: |
@@ -121,7 +86,6 @@ jobs:
           cp .pio/build/esp32dev/littlefs.bin artifacts/littlefs.bin
           cp platformio.ini artifacts/platformio.ini
           printf 'ESP32 LittleFS build\nCommit: %s\n' "$GITHUB_SHA" > artifacts/BUILD.txt
-
       - name: Upload LittleFS artifact
         uses: actions/upload-artifact@v4
         with:
