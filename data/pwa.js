@@ -5,6 +5,8 @@
   const CFG = 'kgx_mqtt_personal_v2';
   const PASS = 'kgx_mqtt_password_local';
   const READY = 'kgx_mqtt_configured';
+  const SESSION = 'kgx_mqtt_password_session';
+  const RESTORED = 'kgx_pwa_session_restored';
 
   if (!document.querySelector('link[rel="manifest"]')) {
     const link = document.createElement('link');
@@ -36,7 +38,7 @@
   function readConfig() {
     try {
       const cfg = JSON.parse(localStorage.getItem(CFG) || '{}');
-      const pass = localStorage.getItem(PASS) || sessionStorage.getItem('kgx_mqtt_password_session') || '';
+      const pass = localStorage.getItem(PASS) || sessionStorage.getItem(SESSION) || '';
       return { cfg, pass };
     } catch (_) {
       return { cfg: {}, pass: '' };
@@ -48,8 +50,6 @@
     return !!(cfg.host && cfg.port && cfg.user && cfg.device && pass && localStorage.getItem(READY) === '1');
   }
 
-  // Password nhập trên Web được chuyển sang localStorage để PWA đã cài có thể tự dùng.
-  // Đây là lưu trữ cục bộ trên thiết bị; không gửi password lên GitHub/Cloudflare.
   function syncWebConfig() {
     try {
       const passInput = document.getElementById('pass');
@@ -81,19 +81,24 @@
     } catch (_) {}
   }
 
-  // Khi mở PWA, khôi phục password vào sessionStorage để index.html hiện tại tự kết nối MQTT.
-  // Nếu cấu hình chưa tồn tại (trường hợp xóa dữ liệu), đưa người dùng về Web cấu hình.
   function restoreForApp() {
     if (!standalone()) return;
     try {
       const { cfg, pass } = readConfig();
       if (!cfg.host || !cfg.port || !cfg.user || !cfg.device || !pass || localStorage.getItem(READY) !== '1') {
-        if (!location.pathname.endsWith('/mqtt_dashboard.html')) {
-          location.replace('/mqtt_dashboard.html?setup=1');
-        }
+        if (!location.pathname.endsWith('/mqtt_dashboard.html')) location.replace('/mqtt_dashboard.html?setup=1');
         return;
       }
-      sessionStorage.setItem('kgx_mqtt_password_session', pass);
+
+      const hadSession = !!sessionStorage.getItem(SESSION);
+      sessionStorage.setItem(SESSION, pass);
+
+      // index.html kiểm tra sessionStorage trước khi pwa.js được chạy.
+      // Nạp lại một lần để nó tự kết nối MQTT ngay khi mở app.
+      if (!hadSession && !sessionStorage.getItem(RESTORED) && !location.pathname.endsWith('/mqtt_dashboard.html')) {
+        sessionStorage.setItem(RESTORED, '1');
+        location.reload();
+      }
     } catch (_) {}
   }
 
@@ -106,9 +111,7 @@
   let deferredPrompt = null;
 
   function createInstallButton() {
-    if (standalone() || document.getElementById('pwaInstall')) return;
-    if (!ready()) return;
-
+    if (standalone() || document.getElementById('pwaInstall') || !ready()) return;
     const bar = document.querySelector('.actions') || document.querySelector('.bar .actions') || document.querySelector('.top .actions') || document.querySelector('.bar');
     if (!bar) return;
 
