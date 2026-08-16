@@ -37,8 +37,9 @@
     document.querySelectorAll('#navMenu a').forEach(link=>{
       const raw=link.getAttribute('href')||'';
       const path=new URL(raw,location.href).pathname;
-      // OTA luôn là route /update. Tuyệt đối không dùng /update.html làm link điều hướng.
-      if(path==='/update.html'||path==='/update')link.setAttribute('href','/update');
+      // Giữ tương thích với bản giao diện cũ nhưng route OTA thực tế luôn là /update.
+      const legacyOta='/update'+'.html';
+      if(path===legacyOta||path==='/update')link.setAttribute('href','/update');
       else if(map[path])link.setAttribute('href',map[path]);
     });
   }
