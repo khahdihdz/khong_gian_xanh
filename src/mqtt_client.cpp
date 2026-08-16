@@ -7,7 +7,6 @@
 #include <Preferences.h>
 #include <time.h>
 
-// MQTT secure client: TLS được xác thực bằng CA do người dùng cấu hình.
 static espMqttClientSecure s_mqtt;
 static Preferences s_prefs;
 static String s_host;
@@ -84,11 +83,9 @@ static void onMessage(const espMqttClientTypes::MessageProperties& properties, c
 static bool configureClient() {
     if (!s_host.length()) { s_statusText = "Thiếu MQTT Broker"; return false; }
 
-    // Đăng ký callback trước khi connect để không bỏ lỡ sự kiện.
     s_mqtt.onConnect(onConnect);
     s_mqtt.onDisconnect(onDisconnect);
     s_mqtt.onMessage(onMessage);
-
     s_mqtt.setClientId(s_deviceId.c_str());
     s_mqtt.setCleanSession(false);
     s_mqtt.setKeepAlive(30);
@@ -110,13 +107,27 @@ static bool configureClient() {
     return true;
 }
 
+// Force disconnect() là bất đồng bộ. Phải chờ state thực sự về disconnected
+// trước khi gọi connect(), nếu không nút Kiểm tra có thể chỉ nối lại phiên cũ.
+static bool stopClientAndWait() {
+    if (s_mqtt.disconnected()) return true;
+    s_mqtt.disconnect(true);
+    const unsigned long started = millis();
+    while (!s_mqtt.disconnected() && millis() - started < 1500UL) {
+        delay(10);
+    }
+    if (!s_mqtt.disconnected()) {
+        s_statusText = "Không thể dừng phiên MQTT cũ";
+        Serial.println("[MQTT] Timeout chờ disconnect()");
+        return false;
+    }
+    return true;
+}
+
 static bool connectMqtt() {
     if (!s_enabled || !s_host.length()) return false;
     if (WiFi.status() != WL_CONNECTED) { s_statusText = "Chờ WiFi kết nối"; return false; }
 
-    // connected() chỉ true sau CONNACK; connect() chỉ bắt đầu quá trình kết nối.
-    // disconnected() == false còn có thể là trạng thái đang kết nối, vì vậy
-    // không được coi nó là kết nối thành công để xử lý nút Kiểm tra.
     if (!s_mqtt.disconnected()) {
         s_statusText = "MQTT đang kết nối...";
         return true;
@@ -144,13 +155,7 @@ void mqttClientInit() {
 }
 
 bool mqttClientReloadConfig() {
-    // Khi reload cấu hình, client có thể đang ở trạng thái connecting. Phải
-    // ngắt hẳn phiên cũ trước khi bắt đầu phiên mới, nếu không connect() mới
-    // sẽ bị bỏ qua và nút "Lưu & kết nối" báo thành công giả.
-    if (!s_mqtt.disconnected()) {
-        s_mqtt.disconnect(true);
-        delay(50);
-    }
+    if (!stopClientAndWait()) return false;
     loadConfig();
     s_lastReconnectMs = 0;
     s_lastPublishMs = millis();
@@ -158,19 +163,11 @@ bool mqttClientReloadConfig() {
         s_statusText = "MQTT đang tắt hoặc chưa cấu hình";
         return true;
     }
-    // true ở đây chỉ có nghĩa là đã khởi động quá trình kết nối.
-    // Trạng thái kết nối thật được cập nhật bởi onConnect().
     return connectMqtt();
 }
 
 bool mqttClientReconnectNow() {
-    // Luôn tạo một phiên kết nối mới, kể cả khi client đang ở trạng thái
-    // connecting. Đây là trường hợp làm nút "Kết nối / kiểm tra" trước đó
-    // có thể không thực sự gọi connect() lần mới.
-    if (!s_mqtt.disconnected()) {
-        s_mqtt.disconnect(true);
-        delay(50);
-    }
+    if (!stopClientAndWait()) return false;
     s_lastReconnectMs = 0;
     return connectMqtt();
 }
@@ -180,7 +177,6 @@ void mqttClientLoop(const SensorData& data) {
     if (wifiManagerGetState() != WIFI_STATE_CONNECTED) return;
 
     if (!s_mqtt.connected()) {
-        // Không gọi connect() lặp khi client đang connecting/disconnecting.
         if (!s_mqtt.disconnected()) return;
         unsigned long now = millis();
         if (now - s_lastReconnectMs < MQTT_RECONNECT_INTERVAL_MS) return;
@@ -189,7 +185,6 @@ void mqttClientLoop(const SensorData& data) {
         return;
     }
 
-    // espMqttClient trên ESP32 mặc định dùng internal task.
     unsigned long now = millis();
     if (now - s_lastPublishMs >= MQTT_PUBLISH_INTERVAL_MS) {
         s_lastPublishMs = now;
