@@ -1,0 +1,85 @@
+name: Build LittleFS ESP32
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'data/**'
+      - 'platformio.ini'
+      - '.github/workflows/build-littlefs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-littlefs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+
+      - name: Prepare ESP32 LittleFS web files
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf esp32-data
+          cp -a data esp32-data
+
+          # PWA chỉ dành cho Cloudflare Pages, không đóng gói vào LittleFS ESP32.
+          rm -f esp32-data/pwa.js
+
+          # ESP32 dùng file HTML trực tiếp thay vì route rewrite của Cloudflare Pages.
+          find esp32-data -type f -name '*.html' -print0 | while IFS= read -r -d '' f; do
+            sed -i '/<script[[:space:]]\+src=["'"']\/pwa\.js["'"'][^>]*><\/script>/d' "$f"
+            sed -i 's#href=["'"']/mqtt["'"']#href="/mqtt_dashboard.html"#g' "$f"
+            sed -i 's#href=["'"']/tools["'"']#href="/tools.html"#g' "$f"
+            sed -i 's#href=["'"']/wifi["'"']#href="/wifi_config.html"#g' "$f"
+            sed -i 's#href=["'"']/update["'"']#href="/update.html"#g' "$f"
+          done
+
+          rm -rf data
+          mv esp32-data data
+
+      - name: Build LittleFS image
+        run: pio run -e esp32dev -t buildfs
+
+      - name: Verify image size
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMG=.pio/build/esp32dev/littlefs.bin
+          test -f "$IMG"
+          SIZE=$(stat -c%s "$IMG")
+          echo "LittleFS image: $IMG"
+          echo "Size: $SIZE bytes ($(numfmt --to=iec-i --suffix=B "$SIZE"))"
+          # Không cho phép image vượt quá 128 KiB của image LittleFS cũ mà người dùng đang sử dụng.
+          if [ "$SIZE" -gt 131072 ]; then
+            echo "ERROR: LittleFS image vượt 128 KiB (131072 bytes)."
+            exit 1
+          fi
+
+      - name: Prepare artifact
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cp .pio/build/esp32dev/littlefs.bin artifacts/littlefs.bin
+          cp platformio.ini artifacts/platformio.ini
+          printf 'ESP32 LittleFS build\nCommit: %s\n' "$GITHUB_SHA" > artifacts/BUILD.txt
+
+      - name: Upload LittleFS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: khong-gian-xanh-littlefs
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
