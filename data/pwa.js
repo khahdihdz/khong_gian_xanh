@@ -86,16 +86,14 @@
     try {
       const { cfg, pass } = readConfig();
       if (!cfg.host || !cfg.port || !cfg.user || !cfg.device || !pass || localStorage.getItem(READY) !== '1') {
-        if (!location.pathname.endsWith('/mqtt_dashboard.html')) location.replace('/mqtt_dashboard.html?setup=1');
+        if (!location.pathname.endsWith('/mqtt')) location.replace('/mqtt?setup=1');
         return;
       }
 
       const hadSession = !!sessionStorage.getItem(SESSION);
       sessionStorage.setItem(SESSION, pass);
 
-      // index.html kiểm tra sessionStorage trước khi pwa.js được chạy.
-      // Nạp lại một lần để nó tự kết nối MQTT ngay khi mở app.
-      if (!hadSession && !sessionStorage.getItem(RESTORED) && !location.pathname.endsWith('/mqtt_dashboard.html')) {
+      if (!hadSession && !sessionStorage.getItem(RESTORED) && !location.pathname.endsWith('/mqtt')) {
         sessionStorage.setItem(RESTORED, '1');
         location.reload();
       }
