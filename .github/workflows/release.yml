@@ -59,7 +59,7 @@ jobs:
               'href="/tools"': 'href="/tools.html"',
               "href='/tools'": "href='/tools.html'",
               'href="/wifi"': 'href="/wifi_config.html"',
-              "href='/wifi'": 'href='/wifi_config.html'",
+              "href='/wifi'": "href='/wifi_config.html'",
           }
 
           for path in root.rglob('*.html'):
@@ -88,9 +88,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          # PlatformIO của project này không hỗ trợ --project-option.
-          # Thay data/ tạm thời trong workspace CI để buildfs dùng đúng nguồn ESP32.
           rm -rf .original-data
           mv data .original-data
           mv .esp32-data data
