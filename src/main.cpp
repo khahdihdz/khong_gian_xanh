@@ -5,7 +5,7 @@
  *  Nền tảng: ESP32 DevKit V1
  *  Cảm biến: SHT31-D + ENS160+AHT21
  *  Hiển thị: OLED SSD1306 128x64
- *  Kết nối: WiFi + Web Dashboard + HTTP
+ *  Kết nối: WiFi + HTTP/WebSocket + Cloud WebSocket
  * ============================================================
  */
 
@@ -29,7 +29,7 @@ static bool s_ledBlinkState = false;
 void setup() {
     Serial.begin(115200);
     delay(200);
-    Serial.println("\n=== KHONG GIAN XANH - HTTP ===");
+    Serial.println("\n=== KHONG GIAN XANH - HTTP + CLOUD WEBSOCKET ===");
 
     pinMode(LED_STATUS_PIN, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
@@ -50,7 +50,7 @@ void setup() {
     configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER_1, NTP_SERVER_2);
     s_lastNtpSyncMs = millis();
 
-    // Dashboard giao tiếp trực tiếp với ESP32 qua HTTP/WebSocket.
+    // ESP32 chủ động kết nối Cloudflare bằng WSS; không MQTT và không cần thiết bị LAN.
     cloudSyncInit();
     webServerInit();
     Serial.println("[MAIN] Khởi động hoàn tất.\n");
@@ -105,6 +105,6 @@ void loop() {
     handleWarning(g_sensorData);
     webServerLoop(g_sensorData, wifiManagerGetStateText(), getTimeString());
 
-    // Đồng bộ HTTP tùy chọn nếu người dùng cấu hình relay riêng.
+    // Cloud WebSocket tự reconnect khi mất mạng/broker không còn tồn tại.
     cloudSyncLoop(g_sensorData);
 }
