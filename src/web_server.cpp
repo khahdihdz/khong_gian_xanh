@@ -122,6 +122,26 @@ void webServerInit() {
     });
 
     server.onNotFound([](AsyncWebServerRequest* request) { request->send(404, "text/plain", "Khong tim thay trang."); });
+
+    // ElegantOTA quản lý cả firmware và filesystem. Firmware OTA vẫn giữ nguyên.
+    // Với LittleFS, phải unmount trước khi ElegantOTA bắt đầu ghi để tránh
+    // filesystem đang được sử dụng đồng thời với Update/U_SPIFFS.
+    ElegantOTA.onStart([]() {
+        Serial.println("[OTA] Bắt đầu OTA - tạm unmount LittleFS...");
+        LittleFS.end();
+    });
+
+    ElegantOTA.onEnd([](bool success) {
+        if (success) {
+            Serial.println("[OTA] OTA hoàn tất. LittleFS sẽ được mount lại sau reboot.");
+        } else {
+            Serial.println("[OTA] OTA thất bại - mount lại LittleFS...");
+            if (!LittleFS.begin(true)) {
+                Serial.println("[OTA] Không thể mount lại LittleFS!");
+            }
+        }
+    });
+
     ElegantOTA.begin(&server); server.begin(); Serial.println("[WEB] Web server đã khởi động.");
 }
 
