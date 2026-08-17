@@ -11,6 +11,7 @@ static String s_savedSsid;
 static String s_savedPass;
 static bool s_apModeActive = false;
 static unsigned long s_connectedAtMs = 0;
+static bool s_pendingConnect = false;
 
 // ------------------------------------------------------------
 static void startAPMode() {
@@ -30,15 +31,15 @@ static void tryConnectSTA() {
         startAPMode();
         return;
     }
-    // Nếu AP đang phát (vd. người dùng vừa lưu WiFi từ trang cấu hình khi đang
-    // nối vào AP KhongGianXanh-Setup), giữ AP sống song song trong lúc thử kết
-    // nối STA, để trang cấu hình có thể tiếp tục hỏi /api/info qua AP và hiển
-    // thị địa chỉ IP mới ngay khi kết nối thành công, thay vì mất kết nối ngay
-    // lập tức.
+
+    // Nếu AP đang phát (ví dụ người dùng vừa lưu WiFi từ trang cấu hình),
+    // giữ AP sống song song trong lúc thử kết nối STA để HTTP response đã gửi
+    // xong và trang cấu hình còn có thể theo dõi IP mới.
     WiFi.mode(s_apModeActive ? WIFI_AP_STA : WIFI_STA);
     WiFi.begin(s_savedSsid.c_str(), s_savedPass.c_str());
     s_state = WIFI_STATE_CONNECTING;
     s_lastAttemptMs = millis();
+    s_pendingConnect = false;
     Serial.print("[WIFI] Đang kết nối tới: ");
     Serial.println(s_savedSsid);
 }
@@ -63,6 +64,12 @@ void wifiManagerInit() {
 void wifiManagerLoop() {
     unsigned long now = millis();
 
+    // Quan trọng: việc bắt đầu WiFi.begin() được trì hoãn tới loop kế tiếp,
+    // sau khi HTTP handler đã có cơ hội trả JSON thành công cho trình duyệt.
+    if (s_pendingConnect && s_state != WIFI_STATE_CONNECTING) {
+        tryConnectSTA();
+    }
+
     if (s_state == WIFI_STATE_CONNECTING) {
         if (WiFi.status() == WL_CONNECTED) {
             s_state = WIFI_STATE_CONNECTED;
@@ -70,10 +77,8 @@ void wifiManagerLoop() {
             digitalWrite(LED_WIFI_PIN, HIGH);
             Serial.print("[WIFI] Đã kết nối. IP: ");
             Serial.println(WiFi.localIP());
-            // Không tắt AP ngay (nếu đang giữ song song) - để trang cấu hình
-            // còn kịp đọc IP mới; AP sẽ tự tắt sau AP_GRACE_AFTER_CONNECT_MS.
+            // Giữ AP song song trong thời gian ân hạn để trang cấu hình đọc IP mới.
         } else if (now - s_lastAttemptMs > 15000UL) {
-            // Quá 15s không kết nối được -> chuyển sang AP mode để người dùng cấu hình lại
             Serial.println("[WIFI] Kết nối thất bại, chuyển sang chế độ AP.");
             startAPMode();
         }
@@ -85,8 +90,6 @@ void wifiManagerLoop() {
             s_apModeActive = false;
             s_lastAttemptMs = now;
         } else if (s_apModeActive && now - s_connectedAtMs >= AP_GRACE_AFTER_CONNECT_MS) {
-            // Đã kết nối ổn định và đủ thời gian để trang cấu hình đọc được
-            // IP mới -> tắt AP để giải phóng tài nguyên / giảm nhiễu sóng.
             WiFi.softAPdisconnect(true);
             WiFi.mode(WIFI_STA);
             s_apModeActive = false;
@@ -98,11 +101,13 @@ void wifiManagerLoop() {
             tryConnectSTA();
         }
     } else if (s_state == WIFI_STATE_AP_MODE) {
-        // Nhấp nháy nhẹ LED để báo đang ở chế độ AP chờ cấu hình
         digitalWrite(LED_WIFI_PIN, (now / 500) % 2);
 
-        // Nếu đã có SSID lưu trước đó, thử kết nối lại định kỳ trong khi vẫn giữ AP
-        if (s_savedSsid.length() > 0 && now - s_lastAttemptMs >= WIFI_RECONNECT_INTERVAL_MS) {
+        // Sau khi lưu cấu hình, chỉ bắt đầu kết nối ở đây, sau khi HTTP response
+        // đã được gửi; không làm gián đoạn request POST /api/wifi-config.
+        if (s_pendingConnect) {
+            tryConnectSTA();
+        } else if (s_savedSsid.length() > 0 && now - s_lastAttemptMs >= WIFI_RECONNECT_INTERVAL_MS) {
             s_lastAttemptMs = now;
             WiFi.mode(WIFI_AP_STA);
             WiFi.begin(s_savedSsid.c_str(), s_savedPass.c_str());
@@ -114,11 +119,16 @@ void wifiManagerLoop() {
 // ------------------------------------------------------------
 bool wifiManagerSaveCredentials(const String& ssid, const String& password) {
     if (ssid.length() == 0) return false;
+
     prefs.putString(PREF_KEY_SSID, ssid);
     prefs.putString(PREF_KEY_PASS, password);
     s_savedSsid = ssid;
     s_savedPass = password;
-    tryConnectSTA();
+
+    // Không gọi WiFi.begin() trực tiếp trong HTTP callback. Chỉ đánh dấu để
+    // wifiManagerLoop() bắt đầu kết nối sau khi response đã được trả về.
+    s_pendingConnect = true;
+    s_lastAttemptMs = millis();
     return true;
 }
 
@@ -128,6 +138,7 @@ void wifiManagerReset() {
     prefs.remove(PREF_KEY_PASS);
     s_savedSsid = "";
     s_savedPass = "";
+    s_pendingConnect = false;
     startAPMode();
 }
 
