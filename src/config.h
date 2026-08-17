@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 #define PROJECT_NAME    "Không Gian Xanh"
-#define FIRMWARE_VERSION "1.3.2"
+#define FIRMWARE_VERSION "1.4.0"
 
 #define I2C_SDA_PIN     21
 #define I2C_SCL_PIN     22
@@ -49,7 +49,10 @@
 #define PREF_KEY_CLOUD_TOKEN "cloud_tok"
 #define PREF_KEY_CLOUD_ON    "cloud_on"
 
-#define CLOUD_SYNC_INTERVAL_MS   60000UL
-#define CLOUD_SYNC_TIMEOUT_MS    8000UL
+// Cloudflare Worker WebSocket relay.
+// ESP32 đẩy dữ liệu mỗi 10 giây để phù hợp Workers Free/Durable Objects Free.
+#define CLOUD_SYNC_INTERVAL_MS   10000UL
+#define CLOUD_WS_RECONNECT_MS    5000UL
+#define CLOUD_WS_TIMEOUT_MS      8000UL
 
 #endif // CONFIG_H
