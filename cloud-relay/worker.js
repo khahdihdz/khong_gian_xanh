@@ -1,115 +1,119 @@
+import { DurableObject } from "cloudflare:workers";
+
 /**
- * Không Gian Xanh — Cloud Relay (Cloudflare Worker)
- * ============================================================
- * Vai trò: làm cầu nối trung gian để dashboard có thể xem dữ liệu
- * ESP32 TỪ BẤT KỲ ĐÂU (dùng mạng di động, quán cà phê, ở công ty...)
- * mà KHÔNG cần kết nối vào cùng mạng WiFi/LAN với thiết bị.
+ * Không Gian Xanh - Cloudflare Worker + Durable Object WebSocket relay.
  *
- * ESP32 (trong mạng nhà) --HTTPS POST--> Worker này --lưu vào KV-->
- *   --HTTPS GET--> Dashboard từ xa (mở ở bất kỳ đâu có internet)
- *
- * Endpoints:
- *   POST /ingest        Header: X-Device-Token: <DEVICE_TOKEN>
- *                        Body JSON: dữ liệu cảm biến hiện tại (do ESP32 gửi)
- *   GET  /api/data       ?token=<READ_TOKEN nếu có cấu hình>  -> bản ghi mới nhất
- *   GET  /api/history     ?hours=1|6|12|24|0&token=...          -> mảng lịch sử
- *
- * Triển khai: xem cloud-relay/README.md
+ * ESP32 mở WSS outbound tới /ws/device?device=<MAC>.
+ * Dashboard mở WSS tới /ws/browser?device=<MAC>&token=<READ_TOKEN>.
+ * Durable Object giữ hai đầu kết nối và chuyển tiếp dữ liệu hai chiều.
+ * Không MQTT, không KV, không cần PC/Raspberry Pi/VPS trong LAN.
  */
 
-const MAX_HISTORY_RECORDS = 4320; // ví dụ: 3 ngày nếu ESP32 đẩy mỗi 60 giây
-
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type,X-Device-Token",
-};
-
-function jsonResponse(obj, status = 200) {
+function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    headers: { "content-type": "application/json; charset=utf-8" },
   });
-}
-
-function checkReadAccess(url, env) {
-  // Nếu người dùng không cấu hình READ_TOKEN thì coi như cho đọc công khai
-  // (chấp nhận được vì chỉ là nhiệt độ/độ ẩm phòng, không phải dữ liệu nhạy cảm -
-  // nhưng khuyến nghị luôn đặt READ_TOKEN để giữ riêng tư).
-  if (!env.READ_TOKEN) return true;
-  return url.searchParams.get("token") === env.READ_TOKEN;
 }
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers: CORS_HEADERS });
+    if (url.pathname === "/health") {
+      return json({ ok: true, service: "khong-gian-xanh-ws-relay" });
     }
 
-    // -------------------- ESP32 đẩy dữ liệu lên --------------------
-    if (url.pathname === "/ingest" && request.method === "POST") {
+    if (url.pathname !== "/ws/device" && url.pathname !== "/ws/browser") {
+      return new Response("Không Gian Xanh WebSocket Relay", { status: 200 });
+    }
+
+    if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+      return new Response("WebSocket required", { status: 426 });
+    }
+
+    const device = (url.searchParams.get("device") || "").trim().toUpperCase();
+    if (!/^[0-9A-F]{8,32}$/.test(device)) {
+      return json({ ok: false, message: "Device ID không hợp lệ" }, 400);
+    }
+
+    if (url.pathname === "/ws/device") {
       const token = request.headers.get("X-Device-Token") || "";
       if (!env.DEVICE_TOKEN || token !== env.DEVICE_TOKEN) {
-        return jsonResponse({ ok: false, message: "Sai hoặc thiếu device token" }, 401);
+        return json({ ok: false, message: "Sai device token" }, 401);
       }
-
-      let body;
-      try {
-        body = await request.json();
-      } catch (e) {
-        return jsonResponse({ ok: false, message: "JSON không hợp lệ" }, 400);
+    } else {
+      const token = url.searchParams.get("token") || "";
+      if (!env.READ_TOKEN || token !== env.READ_TOKEN) {
+        return json({ ok: false, message: "Sai read token" }, 401);
       }
-
-      if (!body.time) body.time = Math.floor(Date.now() / 1000);
-      await env.AIRMON_KV.put("latest", JSON.stringify(body));
-
-      let history = [];
-      const rawHistory = await env.AIRMON_KV.get("history");
-      if (rawHistory) {
-        try { history = JSON.parse(rawHistory); } catch (e) { history = []; }
-      }
-      history.push({
-        time: body.time,
-        temperature: body.temperature,
-        humidity: body.humidity,
-        tvoc: body.tvoc,
-        eco2: body.eco2,
-        aqi: body.aqi,
-      });
-      if (history.length > MAX_HISTORY_RECORDS) {
-        history = history.slice(history.length - MAX_HISTORY_RECORDS);
-      }
-      await env.AIRMON_KV.put("history", JSON.stringify(history));
-
-      return jsonResponse({ ok: true });
     }
 
-    // -------------------- Dashboard từ xa đọc dữ liệu mới nhất --------------------
-    if (url.pathname === "/api/data" && request.method === "GET") {
-      if (!checkReadAccess(url, env)) return jsonResponse({ ok: false, message: "Sai token" }, 401);
-      const raw = await env.AIRMON_KV.get("latest");
-      return new Response(raw || "{}", { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
-    }
-
-    // -------------------- Dashboard từ xa đọc lịch sử --------------------
-    if (url.pathname === "/api/history" && request.method === "GET") {
-      if (!checkReadAccess(url, env)) return jsonResponse({ ok: false, message: "Sai token" }, 401);
-
-      const hours = parseInt(url.searchParams.get("hours") || "0", 10);
-      const raw = await env.AIRMON_KV.get("history");
-      let history = [];
-      if (raw) {
-        try { history = JSON.parse(raw); } catch (e) { history = []; }
-      }
-      if (hours > 0) {
-        const cutoff = Math.floor(Date.now() / 1000) - hours * 3600;
-        history = history.filter((r) => r.time >= cutoff);
-      }
-      return jsonResponse(history);
-    }
-
-    return new Response("Không Gian Xanh Cloud Relay đang chạy.", { headers: CORS_HEADERS });
+    const id = env.KGX_ROOMS.idFromName(device);
+    return env.KGX_ROOMS.get(id).fetch(request);
   },
 };
+
+export class KgxRoom extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.ctx = ctx;
+    // Ping/pong được xử lý ở runtime, không cần đánh thức DO.
+    this.ctx.setWebSocketAutoResponse(
+      new WebSocketRequestResponsePair("ping", "pong")
+    );
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    const role = url.pathname.endsWith("/device") ? "device" : "browser";
+
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
+
+    this.ctx.acceptWebSocket(server, [role]);
+    server.serializeAttachment({ role, connectedAt: Date.now() });
+
+    // Browser mới kết nối được biết trạng thái thiết bị ngay.
+    if (role === "browser") {
+      const devices = this.ctx.getWebSockets("device");
+      server.send(JSON.stringify({
+        type: "relay",
+        device_online: devices.length > 0,
+      }));
+    }
+
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  webSocketMessage(ws, message) {
+    const state = ws.deserializeAttachment() || {};
+    const targetRole = state.role === "device" ? "browser" : "device";
+    const targets = this.ctx.getWebSockets(targetRole);
+
+    for (const target of targets) {
+      if (target.readyState === WebSocket.OPEN) {
+        try { target.send(message); } catch (_) {}
+      }
+    }
+  }
+
+  webSocketClose(ws, code, reason, wasClean) {
+    const state = ws.deserializeAttachment() || {};
+    ws.close(code, reason);
+
+    // Báo cho phía còn lại để dashboard biết ESP32 vừa offline.
+    if (state.role === "device") {
+      for (const target of this.ctx.getWebSockets("browser")) {
+        if (target.readyState === WebSocket.OPEN) {
+          try { target.send(JSON.stringify({ type: "relay", device_online: false })); } catch (_) {}
+        }
+      }
+    }
+    void wasClean;
+  }
+
+  webSocketError(ws, error) {
+    console.error("WebSocket error:", error);
+  }
+}
