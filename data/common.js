@@ -3,7 +3,8 @@
 
   /* =========================================================
    * KHÔNG GIAN XANH - GIAO DIỆN DÙNG CHUNG
-   * Header/footer phải giống nhau trên Cloudflare Pages và ESP32.
+   * Dashboard dùng HTTP/WebSocket trực tiếp với ESP32.
+   * Không còn MQTT trên trình duyệt.
    * ========================================================= */
   const CSS = `
     html,body{min-height:100%;}
@@ -24,23 +25,21 @@
     @media(max-width:390px){.kgx-actions{grid-template-columns:minmax(0,1fr) 88px 88px}.kgx-nav,.kgx-nav-toggle{width:88px}.kgx-pill,.kgx-badge,.kgx-nav-toggle{font-size:.74rem;padding-left:8px;padding-right:8px}}
   `;
 
-  const FALLBACK_HEADER = `<header class="kgx-header"><div class="kgx-brand">🌿 Không Gian Xanh<small>Giám sát môi trường phòng</small></div><div class="kgx-actions"><span class="kgx-pill"><span id="dot" class="kgx-dot"></span><span id="conn">Đang kiểm tra MQTT</span></span><span id="clock" class="kgx-pill">--:--:--</span><div class="kgx-nav" id="nav"><button class="kgx-nav-toggle" id="navToggle" type="button" aria-expanded="false" aria-controls="navMenu">☰ Menu</button><nav class="kgx-nav-menu" id="navMenu" aria-label="Điều hướng"><a href="/">🏠 Tổng quan</a><a href="/mqtt">📡 MQTT</a><a href="/tools">⚙️ Chức năng</a><a href="/wifi">📶 Wi-Fi</a><a href="/update">⬆️ Nâng cấp OTA</a></nav></div></div></header>`;
+  const FALLBACK_HEADER = `<header class="kgx-header"><div class="kgx-brand">🌿 Không Gian Xanh<small>Giám sát môi trường phòng</small></div><div class="kgx-actions"><span class="kgx-pill"><span id="dot" class="kgx-dot"></span><span id="conn">Đang kiểm tra thiết bị</span></span><span id="clock" class="kgx-pill">--:--:--</span><div class="kgx-nav" id="nav"><button class="kgx-nav-toggle" id="navToggle" type="button" aria-expanded="false" aria-controls="navMenu">☰ Menu</button><nav class="kgx-nav-menu" id="navMenu" aria-label="Điều hướng"><a href="/">🏠 Tổng quan</a><a href="/tools">⚙️ Chức năng</a><a href="/wifi">📶 Wi-Fi</a><a href="/update">⬆️ Nâng cấp OTA</a></nav></div></div></header>`;
   const FALLBACK_FOOTER = `<footer class="kgx-footer">Powered by <a href="https://khahdihdz.github.io" target="_blank" rel="noopener noreferrer">khahdihdz.github.io</a></footer>`;
 
   function installCss(){if(document.getElementById('kgx-common-style'))return;const style=document.createElement('style');style.id='kgx-common-style';style.textContent=CSS;document.head.appendChild(style)}
   async function loadFragment(path,fallback){try{const r=await fetch(path,{cache:'no-store'});if(r.ok){const t=await r.text();if(t.trim())return t}}catch(e){}return fallback}
   function setHeaderState(on,text){const dot=document.getElementById('dot'),conn=document.getElementById('conn');if(dot)dot.className='kgx-dot'+(on?' on':'');if(conn)conn.textContent=text}
+  window.kgxSetHeaderState=setHeaderState;
 
   function normalizeRoutes(){
     const esp32=!location.hostname.endsWith('.pages.dev');
-    const map=esp32?{'/mqtt':'/mqtt_dashboard.html','/tools':'/tools.html','/wifi':'/wifi_config.html','/update':'/update'}:{'/mqtt':'/mqtt','/tools':'/tools','/wifi':'/wifi','/update':'/update'};
+    const map=esp32?{'/tools':'/tools.html','/wifi':'/wifi_config.html','/update':'/update'}:{'/tools':'/tools','/wifi':'/wifi','/update':'/update'};
     document.querySelectorAll('#navMenu a').forEach(link=>{
       const raw=link.getAttribute('href')||'';
       const path=new URL(raw,location.href).pathname;
-      // Giữ tương thích với bản giao diện cũ nhưng route OTA thực tế luôn là /update.
-      const legacyOta='/update'+'.html';
-      if(path===legacyOta||path==='/update')link.setAttribute('href','/update');
-      else if(map[path])link.setAttribute('href',map[path]);
+      if(map[path])link.setAttribute('href',map[path]);
     });
   }
 
@@ -53,18 +52,14 @@
     const current=location.pathname.replace(/\/$/,'')||'/';nav.querySelectorAll('a').forEach(link=>{const href=new URL(link.href,location.href).pathname.replace(/\/$/,'')||'/';if(href===current)link.classList.add('active')});
   }
 
-  function loadMqttLibrary(){if(window.mqtt)return Promise.resolve(window.mqtt);if(window.__kgxMqttLoader)return window.__kgxMqttLoader;window.__kgxMqttLoader=new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://unpkg.com/mqtt/dist/mqtt.min.js';s.async=true;s.onload=()=>resolve(window.mqtt);s.onerror=reject;document.head.appendChild(s)});return window.__kgxMqttLoader}
-  window.kgxSetHeaderState = setHeaderState;
-
-  async function connectHeaderMqtt(){
-    // Nếu trang hiện tại (vd: /mqtt) đã tự quản lý kết nối MQTT riêng của nó,
-    // KHÔNG mở thêm 1 kết nối WebSocket thứ 2 tới cùng broker ở đây nữa.
-    // Trước đây header luôn tự kết nối song song với trang MQTT -> mỗi lần
-    // vào trang mở ra 2 phiên MQTT "clean:false" với clientId ngẫu nhiên,
-    // các phiên cũ không mất đi trên broker, dồn lại theo thời gian làm
-    // MQTT kết nối chập chờn / không xuyên suốt.
-    if (window.__kgxSkipHeaderMqtt) return;
-    try{let cfg={};try{cfg=JSON.parse(localStorage.getItem('kgx_mqtt_personal_v2')||'{}')}catch(e){}const pass=sessionStorage.getItem('kgx_mqtt_password_session')||'';if(!cfg.host||!cfg.device||!cfg.user||!pass){setHeaderState(false,'Chưa cấu hình MQTT');return}const mqtt=await loadMqttLibrary();if(!mqtt){setHeaderState(false,'MQTT chưa sẵn sàng');return}if(window.__kgxHeaderMqtt){try{window.__kgxHeaderMqtt.end(true)}catch(e){}}const port=Number(cfg.port)||8884,topic=`khonggianxanh/${cfg.device}/telemetry`;const client=mqtt.connect(`wss://${cfg.host}:${port}/mqtt`,{username:cfg.user,password:pass,clientId:'kgx-header-'+Math.random().toString(16).slice(2),clean:true,keepalive:30,reconnectPeriod:3000,connectTimeout:10000,resubscribe:true});window.__kgxHeaderMqtt=client;client.on('connect',()=>setHeaderState(true,'MQTT đã kết nối'));client.on('reconnect',()=>setHeaderState(false,'Đang kết nối lại MQTT...'));client.on('offline',()=>setHeaderState(false,'MQTT offline'));client.on('error',()=>setHeaderState(false,'MQTT lỗi'));client.on('message',(t,p)=>{if(t!==topic)return;try{const d=JSON.parse(p.toString()),ts=Number(d.timestamp);if(Number.isFinite(ts)&&ts>0){const clock=document.getElementById('clock');if(clock)clock.textContent=new Date(ts*1000).toLocaleTimeString('vi-VN')}}catch(e){}});client.subscribe(topic,{qos:1})}catch(e){setHeaderState(false,'MQTT không khả dụng')}
+  async function pollDeviceStatus(){
+    try{
+      const r=await fetch('/api/info',{cache:'no-store'});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const d=await r.json();
+      setHeaderState(true,'Thiết bị đã kết nối');
+      if(d.time){const clock=document.getElementById('clock');if(clock)clock.textContent=d.time.split(' ')[1]||d.time}
+    }catch(e){setHeaderState(false,'Thiết bị offline')}
   }
 
   async function init(){
@@ -74,7 +69,9 @@
     const header=await loadFragment('/header.html',FALLBACK_HEADER),footer=await loadFragment('/footer.html',FALLBACK_FOOTER);
     const hw=document.createElement('div');hw.innerHTML=header.trim();const h=hw.firstElementChild;if(h)document.body.insertBefore(h,document.body.firstChild);
     const fw=document.createElement('div');fw.innerHTML=footer.trim();const f=fw.firstElementChild;if(f)document.body.appendChild(f);
-    bindNav();connectHeaderMqtt();
+    bindNav();
+    pollDeviceStatus();
+    setInterval(pollDeviceStatus,5000);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
