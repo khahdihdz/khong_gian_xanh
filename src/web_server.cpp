@@ -102,13 +102,11 @@ void webServerInit() {
         if (request->hasParam("tls", true)) tls = request->getParam("tls", true)->value() == "1";
         if (!host.length()) { request->send(400, "application/json", "{\"ok\":false,\"message\":\"Thiếu MQTT Broker\"}"); return; }
         if (port == 0 || port > 65535) { request->send(400, "application/json", "{\"ok\":false,\"message\":\"Port MQTT không hợp lệ\"}"); return; }
-
         Preferences prefs; prefs.begin(PREF_NAMESPACE, false);
         prefs.putString(PREF_KEY_MQTT_HOST, host); prefs.putUShort(PREF_KEY_MQTT_PORT, port); prefs.putString(PREF_KEY_MQTT_USER, user);
         if (pass.length()) prefs.putString(PREF_KEY_MQTT_PASS, pass);
         if (ca.length()) prefs.putString(PREF_KEY_MQTT_CA, ca);
         prefs.putBool(PREF_KEY_MQTT_ON, enabled); prefs.putBool(PREF_KEY_MQTT_TLS, tls); prefs.end();
-
         bool started = mqttClientReloadConfig();
         String message = !enabled ? "Đã lưu và tắt MQTT." : (started ? "Đã lưu cấu hình và bắt đầu kết nối MQTT." : "Đã lưu nhưng chưa thể bắt đầu kết nối. Kiểm tra WiFi, Broker và CA.");
         String json = "{\"ok\":true,\"started\":" + String(started ? "true" : "false") + ",\"connected\":" + String(mqttClientIsConnected() ? "true" : "false") + ",\"message\":\"" + message + "\"}";
@@ -123,26 +121,23 @@ void webServerInit() {
 
     server.onNotFound([](AsyncWebServerRequest* request) { request->send(404, "text/plain", "Khong tim thay trang."); });
 
-    // ElegantOTA quản lý cả firmware và filesystem. Firmware OTA vẫn giữ nguyên.
-    // Với LittleFS, phải unmount trước khi ElegantOTA bắt đầu ghi để tránh
-    // filesystem đang được sử dụng đồng thời với Update/U_SPIFFS.
+    // ElegantOTA tự đăng ký /update, /ota/start, /ota/upload và /ota/end.
+    // Không tự tạo route /update để tránh xung đột với ElegantOTA.
     ElegantOTA.onStart([]() {
         Serial.println("[OTA] Bắt đầu OTA - tạm unmount LittleFS...");
         LittleFS.end();
     });
-
     ElegantOTA.onEnd([](bool success) {
         if (success) {
-            Serial.println("[OTA] OTA hoàn tất. LittleFS sẽ được mount lại sau reboot.");
+            Serial.println("[OTA] OTA hoàn tất. ESP32 sẽ reboot để mount lại LittleFS.");
         } else {
             Serial.println("[OTA] OTA thất bại - mount lại LittleFS...");
-            if (!LittleFS.begin(true)) {
-                Serial.println("[OTA] Không thể mount lại LittleFS!");
-            }
+            if (!LittleFS.begin(true)) Serial.println("[OTA] Không thể mount lại LittleFS!");
         }
     });
-
-    ElegantOTA.begin(&server); server.begin(); Serial.println("[WEB] Web server đã khởi động.");
+    ElegantOTA.begin(&server);
+    server.begin();
+    Serial.println("[WEB] Web server đã khởi động. OTA: /update");
 }
 
 void webServerLoop(const SensorData& data, const String& wifiStatus, const String& timeStr) {
