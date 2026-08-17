@@ -5,7 +5,7 @@
  *  Nền tảng: ESP32 DevKit V1
  *  Cảm biến: SHT31-D + ENS160+AHT21
  *  Hiển thị: OLED SSD1306 128x64
- *  Kết nối: WiFi + Web Dashboard + MQTT
+ *  Kết nối: WiFi + Web Dashboard + HTTP
  * ============================================================
  */
 
@@ -19,7 +19,6 @@
 #include "web_server.h"
 #include "storage.h"
 #include "cloud_sync.h"
-#include "mqtt_client.h"
 
 static unsigned long s_lastSensorReadMs = 0;
 static unsigned long s_lastDisplayMs = 0;
@@ -30,7 +29,7 @@ static bool s_ledBlinkState = false;
 void setup() {
     Serial.begin(115200);
     delay(200);
-    Serial.println("\n=== KHONG GIAN XANH - MQTT ===");
+    Serial.println("\n=== KHONG GIAN XANH - HTTP ===");
 
     pinMode(LED_STATUS_PIN, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
@@ -51,10 +50,8 @@ void setup() {
     configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER_1, NTP_SERVER_2);
     s_lastNtpSyncMs = millis();
 
-    // MQTT chạy song song với cloud HTTP cũ để tránh mất tương thích.
-    mqttClientInit();
+    // Dashboard giao tiếp trực tiếp với ESP32 qua HTTP/WebSocket.
     cloudSyncInit();
-
     webServerInit();
     Serial.println("[MAIN] Khởi động hoàn tất.\n");
 }
@@ -108,9 +105,6 @@ void loop() {
     handleWarning(g_sensorData);
     webServerLoop(g_sensorData, wifiManagerGetStateText(), getTimeString());
 
-    // MQTT realtime telemetry + command.
-    mqttClientLoop(g_sensorData);
-
-    // Giữ HTTP cloud relay cũ để tương thích ngược.
+    // Đồng bộ HTTP tùy chọn nếu người dùng cấu hình relay riêng.
     cloudSyncLoop(g_sensorData);
 }
