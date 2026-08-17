@@ -18,6 +18,8 @@ static bool s_enabled = false;
 static bool s_tls = true;
 static unsigned long s_lastReconnectMs = 0;
 static unsigned long s_lastPublishMs = 0;
+static unsigned long s_lastWifiDownMs = 0;
+static uint8_t s_reconnectFailures = 0;
 static String s_statusText = "Chưa cấu hình MQTT";
 static String s_deviceId;
 
@@ -60,12 +62,15 @@ static void onConnect(bool sessionPresent) {
     s_mqtt.subscribe((base + "/command").c_str(), 1);
     s_mqtt.subscribe((base + "/config").c_str(), 1);
     s_statusText = sessionPresent ? "MQTT TLS đã kết nối (session cũ)" : "MQTT TLS đã kết nối";
+    s_reconnectFailures = 0;
+    s_lastPublishMs = millis();
     Serial.printf("[MQTT] ĐÃ KẾT NỐI HiveMQ: %s:%u\n", s_host.c_str(), s_port);
     Serial.printf("[MQTT] Device ID: %s\n", s_deviceId.c_str());
 }
 
 static void onDisconnect(espMqttClientTypes::DisconnectReason reason) {
     s_statusText = "MQTT ngắt kết nối, mã lỗi: " + String((int)reason);
+    s_lastReconnectMs = millis();
     Serial.printf("[MQTT] NGẮT KẾT NỐI, mã lỗi: %d\n", (int)reason);
 }
 
@@ -88,9 +93,12 @@ static bool configureClient() {
     s_mqtt.onDisconnect(onDisconnect);
     s_mqtt.onMessage(onMessage);
     s_mqtt.setClientId(s_deviceId.c_str());
+    // Giữ session MQTT để broker có thể giữ subscription và trạng thái khi
+    // mạng chập chờn, thay vì tạo session mới ở mỗi lần reconnect.
     s_mqtt.setCleanSession(false);
-    s_mqtt.setKeepAlive(30);
-    s_mqtt.setTimeout(10);
+    // KeepAlive dài hơn giúp tránh disconnect giả khi loop bị bận trong thời gian ngắn.
+    s_mqtt.setKeepAlive(60);
+    s_mqtt.setTimeout(15);
     s_mqtt.setServer(s_host.c_str(), s_port);
     s_mqtt.setCredentials(s_user.c_str(), s_pass.c_str());
 
@@ -123,9 +131,23 @@ static bool stopClientAndWait() {
     return true;
 }
 
+static unsigned long reconnectDelayMs() {
+    // Backoff nhẹ để tránh spam broker khi WiFi/broker đang mất:
+    // 5s -> 10s -> 20s -> tối đa 30s.
+    switch (s_reconnectFailures) {
+        case 0: return 5000UL;
+        case 1: return 10000UL;
+        case 2: return 20000UL;
+        default: return 30000UL;
+    }
+}
+
 static bool connectMqtt() {
     if (!s_enabled || !s_host.length()) return false;
-    if (WiFi.status() != WL_CONNECTED) { s_statusText = "Chờ WiFi kết nối"; return false; }
+    if (WiFi.status() != WL_CONNECTED) {
+        s_statusText = "Chờ WiFi kết nối";
+        return false;
+    }
 
     if (!s_mqtt.disconnected()) {
         s_statusText = "MQTT đang kết nối...";
@@ -136,7 +158,9 @@ static bool connectMqtt() {
     s_statusText = "MQTT đang kết nối...";
     bool started = s_mqtt.connect();
     if (!started) {
+        if (s_reconnectFailures < 3) ++s_reconnectFailures;
         s_statusText = "MQTT không thể bắt đầu kết nối";
+        s_lastReconnectMs = millis();
         Serial.println("[MQTT] Không thể bắt đầu connect()");
         return false;
     }
@@ -150,14 +174,16 @@ void mqttClientInit() {
     s_deviceId.toLowerCase();
     loadConfig();
     s_statusText = (s_enabled && s_host.length()) ? "MQTT đã cấu hình, chờ kết nối" : "MQTT đang tắt hoặc chưa cấu hình";
+    s_lastReconnectMs = millis();
     if (s_enabled && s_host.length()) connectMqtt();
 }
 
 bool mqttClientReloadConfig() {
     if (!stopClientAndWait()) return false;
     loadConfig();
-    s_lastReconnectMs = 0;
+    s_lastReconnectMs = millis();
     s_lastPublishMs = millis();
+    s_reconnectFailures = 0;
     if (!s_enabled || !s_host.length()) {
         s_statusText = "MQTT đang tắt hoặc chưa cấu hình";
         return true;
@@ -167,20 +193,33 @@ bool mqttClientReloadConfig() {
 
 bool mqttClientReconnectNow() {
     if (!stopClientAndWait()) return false;
-    s_lastReconnectMs = 0;
+    s_lastReconnectMs = millis();
+    s_reconnectFailures = 0;
     return connectMqtt();
 }
 
 void mqttClientLoop(const SensorData& data) {
     if (!s_enabled || !s_host.length()) return;
-    if (wifiManagerGetState() != WIFI_STATE_CONNECTED) return;
+
+    // Khi WiFi mất, ép phiên MQTT về trạng thái disconnected. Nếu không làm
+    // vậy, một socket đang treo có thể khiến reconnectMqtt() tưởng rằng phiên
+    // cũ vẫn đang kết nối và không bao giờ thử lại.
+    if (wifiManagerGetState() != WIFI_STATE_CONNECTED) {
+        if (!s_mqtt.disconnected()) {
+            s_mqtt.disconnect(true);
+            s_lastWifiDownMs = millis();
+            s_statusText = "MQTT chờ WiFi kết nối lại";
+        }
+        return;
+    }
 
     if (!s_mqtt.connected()) {
         if (!s_mqtt.disconnected()) return;
         unsigned long now = millis();
-        if (now - s_lastReconnectMs < MQTT_RECONNECT_INTERVAL_MS) return;
+        unsigned long delayMs = reconnectDelayMs();
+        if (now - s_lastReconnectMs < delayMs) return;
         s_lastReconnectMs = now;
-        connectMqtt();
+        if (!connectMqtt()) return;
         return;
     }
 
@@ -193,6 +232,8 @@ void mqttClientLoop(const SensorData& data) {
             Serial.println("[MQTT] Đã publish telemetry QoS 1");
         } else {
             s_statusText = "MQTT đã kết nối nhưng publish thất bại";
+            // Không chờ tới chu kỳ publish kế tiếp mới thử lại; để loop reconnect
+            // xử lý nếu thư viện đã chuyển phiên sang disconnected.
         }
     }
 }
