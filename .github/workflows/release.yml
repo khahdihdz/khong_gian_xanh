@@ -108,22 +108,16 @@ jobs:
           cd toolkit_bundle
           zip -r "../release_assets/khong-gian-xanh-toolkit-v${{ steps.ver.outputs.version }}.zip" firmware
 
-      - name: Tạo Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.files.outputs.tag }}
-          name: "Không Gian Xanh v${{ steps.ver.outputs.version }} (build ${{ github.run_number }})"
-          body: |
-            🌿 **Không Gian Xanh** - Build tự động từ commit `${{ github.sha }}`
-
-            ### File đính kèm
-            - `khong-gian-xanh-firmware-v${{ steps.ver.outputs.version }}.bin` — firmware ESP32.
-            - `khong-gian-xanh-littlefs-v${{ steps.ver.outputs.version }}.bin` — giao diện web LittleFS.
-            - `khong-gian-xanh-toolkit-v${{ steps.ver.outputs.version }}.zip` — bộ 5 file cho esp32-android-toolkit.
-
-            ### Ghi chú
-            Muốn tăng phiên bản, sửa `FIRMWARE_VERSION` trong `src/config.h` rồi push lên `main`.
-          files: |
-            release_assets/*.bin
-            release_assets/*.zip
-          generate_release_notes: true
+      - name: Tạo Release bằng GitHub CLI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -eux
+          TAG="${{ steps.files.outputs.tag }}"
+          gh release create "$TAG" \
+            release_assets/*.bin \
+            release_assets/*.zip \
+            --repo "${{ github.repository }}" \
+            --title "Không Gian Xanh v${{ steps.ver.outputs.version }} (build ${{ github.run_number }})" \
+            --notes "🌿 Không Gian Xanh - Build tự động từ commit `${{ github.sha }}`\n\n### File đính kèm\n- khong-gian-xanh-firmware-v${{ steps.ver.outputs.version }}.bin — firmware ESP32.\n- khong-gian-xanh-littlefs-v${{ steps.ver.outputs.version }}.bin — giao diện web LittleFS.\n- khong-gian-xanh-toolkit-v${{ steps.ver.outputs.version }}.zip — bộ 5 file cho esp32-android-toolkit.\n\n### Ghi chú\nMuốn tăng phiên bản, sửa FIRMWARE_VERSION trong src/config.h rồi push lên main."
