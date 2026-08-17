@@ -13,6 +13,7 @@ static String s_token;
 static bool s_enabled = false;
 static bool s_connected = false;
 static bool s_wsStarted = false;
+static bool s_pendingStart = false;
 static unsigned long s_lastPushMs = 0;
 static String s_statusText = "Chưa cấu hình";
 static String s_deviceId;
@@ -24,9 +25,22 @@ static String deviceId() {
     return String(buf);
 }
 
+// Cho phép người dùng nhập https:// hoặc http:// trong giao diện.
+// Worker WebSocket tương ứng phải dùng wss:// hoặc ws://.
+static String normalizeWsUrl(String url) {
+    url.trim();
+    if (url.startsWith("https://")) {
+        url.remove(0, 8);
+        url = "wss://" + url;
+    } else if (url.startsWith("http://")) {
+        url.remove(0, 7);
+        url = "ws://" + url;
+    }
+    return url;
+}
+
 static bool parseWsUrl(const String& url, String& host, uint16_t& port, String& path, bool& secure) {
-    String u = url;
-    u.trim();
+    String u = normalizeWsUrl(url);
     secure = u.startsWith("wss://");
     const String prefix = secure ? "wss://" : "ws://";
     if (!u.startsWith(prefix)) return false;
@@ -44,7 +58,7 @@ static bool parseWsUrl(const String& url, String& host, uint16_t& port, String& 
         host = authority;
         port = secure ? 443 : 80;
     }
-    return host.length() > 0;
+    return host.length() > 0 && port > 0;
 }
 
 static void cloudWsEvent(WStype_t type, uint8_t* payload, size_t length) {
@@ -78,7 +92,8 @@ static void startWebSocket() {
     uint16_t port = 443;
     bool secure = true;
     if (!parseWsUrl(s_url, host, port, path, secure)) {
-        s_statusText = "URL WebSocket không hợp lệ";
+        s_statusText = "URL WebSocket không hợp lệ (dùng wss:// hoặc https://)";
+        s_pendingStart = false;
         return;
     }
 
@@ -96,33 +111,43 @@ static void startWebSocket() {
     else s_ws.begin(host.c_str(), port, path.c_str());
 
     s_wsStarted = true;
+    s_pendingStart = false;
     Serial.println("[CLOUD] Kết nối WSS tới: " + s_url);
 }
 
 void cloudSyncInit() {
     s_deviceId = deviceId();
     s_prefs.begin(PREF_NAMESPACE, true);
-    s_url = s_prefs.getString(PREF_KEY_CLOUD_URL, "");
+    s_url = normalizeWsUrl(s_prefs.getString(PREF_KEY_CLOUD_URL, ""));
     s_token = s_prefs.getString(PREF_KEY_CLOUD_TOKEN, "");
     s_enabled = s_prefs.getBool(PREF_KEY_CLOUD_ON, false);
     s_prefs.end();
 
     s_lastPushMs = millis() - CLOUD_SYNC_INTERVAL_MS;
     s_wsStarted = false;
+    s_pendingStart = s_enabled && s_url.length() > 0;
     s_connected = false;
 
     Serial.println("[CLOUD] Device ID: " + s_deviceId);
-    if (s_enabled && s_url.length()) startWebSocket();
-    else Serial.println("[CLOUD] Cloud WebSocket đang TẮT.");
+    if (s_enabled && s_url.length()) {
+        // Không mở WebSocket trong setup trước khi vòng lặp mạng chạy.
+        Serial.println("[CLOUD] Cloud WebSocket đã bật, chờ vòng lặp mạng để kết nối.");
+    } else {
+        Serial.println("[CLOUD] Cloud WebSocket đang TẮT.");
+    }
 }
 
 void cloudSyncSaveConfig(const String& url, const String& token, bool enabled) {
-    s_url = url;
+    s_url = normalizeWsUrl(url);
     s_token = token;
     s_enabled = enabled;
 
+    // Quan trọng: không khởi tạo WSS ngay bên trong callback HTTP AsyncWebServer.
+    // Làm vậy có thể chiếm tài nguyên socket trong lúc ESP32 còn đang trả response,
+    // khiến trình duyệt nhận lỗi "Failed to fetch" dù cấu hình đã được ghi thành công.
     s_ws.disconnect();
     s_wsStarted = false;
+    s_pendingStart = enabled && s_url.length() > 0;
     s_connected = false;
 
     s_prefs.begin(PREF_NAMESPACE, false);
@@ -131,17 +156,16 @@ void cloudSyncSaveConfig(const String& url, const String& token, bool enabled) {
     s_prefs.putBool(PREF_KEY_CLOUD_ON, s_enabled);
     s_prefs.end();
 
-    s_statusText = enabled ? "Đã lưu, đang kết nối Cloud WebSocket..." : "Đã tắt Cloud WebSocket";
+    s_statusText = enabled ? "Đã lưu, đang chờ kết nối Cloud WebSocket..." : "Đã tắt Cloud WebSocket";
     s_lastPushMs = millis() - CLOUD_SYNC_INTERVAL_MS;
-    if (enabled) startWebSocket();
 }
 
-bool cloudSyncIsEnabled()     { return s_enabled && s_url.length() > 0; }
-String cloudSyncGetUrl()      { return s_url; }
-String cloudSyncGetToken()    { return s_token; }
-bool cloudSyncHasToken()      { return s_token.length() > 0; }
-String cloudSyncGetStatusText(){ return s_statusText; }
-String cloudSyncGetDeviceId() { return s_deviceId; }
+bool cloudSyncIsEnabled()      { return s_enabled && s_url.length() > 0; }
+String cloudSyncGetUrl()       { return s_url; }
+String cloudSyncGetToken()     { return s_token; }
+bool cloudSyncHasToken()       { return s_token.length() > 0; }
+String cloudSyncGetStatusText() { return s_statusText; }
+String cloudSyncGetDeviceId()  { return s_deviceId; }
 
 static String buildPayload(const SensorData& d) {
     time_t now;
@@ -168,7 +192,7 @@ void cloudSyncLoop(const SensorData& data) {
     if (!cloudSyncIsEnabled()) return;
     if (wifiManagerGetState() != WIFI_STATE_CONNECTED) return;
 
-    if (!s_wsStarted) startWebSocket();
+    if (s_pendingStart || !s_wsStarted) startWebSocket();
     s_ws.loop();
 
     unsigned long now = millis();
