@@ -175,7 +175,8 @@ void cloudSyncLoop(const SensorData& data) {
     if (!s_connected || now - s_lastPushMs < CLOUD_SYNC_INTERVAL_MS) return;
     s_lastPushMs = now;
 
-    if (s_ws.sendTXT(buildPayload(data))) {
+    String payload = buildPayload(data);
+    if (s_ws.sendTXT(payload)) {
         s_statusText = "Đã đồng bộ Cloud WebSocket";
     } else {
         s_statusText = "Không gửi được dữ liệu Cloud";
