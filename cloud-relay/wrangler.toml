@@ -1,0 +1,13 @@
+name = "khong-gian-xanh-relay"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+# Sau khi tạo KV namespace (xem README.md), dán "id" trả về vào đây.
+kv_namespaces = [
+  { binding = "AIRMON_KV", id = "DÁN_KV_NAMESPACE_ID_VÀO_ĐÂY" }
+]
+
+# KHÔNG ghi DEVICE_TOKEN / READ_TOKEN trực tiếp ở đây (file này thường được
+# commit lên Git). Dùng lệnh sau để đặt các giá trị bí mật:
+#   wrangler secret put DEVICE_TOKEN
+#   wrangler secret put READ_TOKEN

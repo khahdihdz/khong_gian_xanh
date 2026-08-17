@@ -1,0 +1,108 @@
+name: Build & Release Firmware
+
+# Tự động chạy sau mỗi lần push vào nhánh main (bỏ qua nếu chỉ sửa README/docs)
+on:
+  push:
+    branches: [ "main" ]
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+  workflow_dispatch: {} # cho phép chạy tay từ tab Actions nếu cần
+
+permissions:
+  contents: write # cần quyền ghi để tạo Release + upload file
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Lấy mã nguồn
+        uses: actions/checkout@v4
+
+      - name: Cài Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Cache thư viện PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+
+      - name: Cài PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build firmware (app)
+        run: pio run -e esp32dev
+
+      - name: Build filesystem image (LittleFS - data/)
+        run: pio run -e esp32dev -t buildfs
+
+      - name: Đọc số phiên bản từ config.h
+        id: ver
+        run: |
+          VERSION=$(grep -oP '#define FIRMWARE_VERSION\s+"\K[^"]+' src/config.h)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Chuẩn bị file đính kèm Release
+        id: files
+        run: |
+          mkdir -p release_assets
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          TAG="v${{ steps.ver.outputs.version }}-${SHORT_SHA}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          cp .pio/build/esp32dev/firmware.bin \
+             "release_assets/khong-gian-xanh-firmware-v${{ steps.ver.outputs.version }}.bin"
+          cp .pio/build/esp32dev/littlefs.bin \
+             "release_assets/khong-gian-xanh-littlefs-v${{ steps.ver.outputs.version }}.bin"
+
+      - name: Đóng gói bộ file cho esp32-android-toolkit
+        id: toolkit
+        run: |
+          # esp32-android-toolkit (flash qua Termux/Android) cần đúng 5 file
+          # trong thư mục firmware/, tên cố định không kèm số version:
+          #   bootloader.bin, partitions.bin, boot_app0.bin,
+          #   firmware.bin, littlefs.bin
+          # boot_app0.bin là file chung của Arduino core, không đổi theo project.
+          mkdir -p toolkit_bundle/firmware
+          cp .pio/build/esp32dev/bootloader.bin  toolkit_bundle/firmware/bootloader.bin
+          cp .pio/build/esp32dev/partitions.bin  toolkit_bundle/firmware/partitions.bin
+          cp .pio/build/esp32dev/firmware.bin    toolkit_bundle/firmware/firmware.bin
+          cp .pio/build/esp32dev/littlefs.bin    toolkit_bundle/firmware/littlefs.bin
+
+          BOOT_APP0="$(find ~/.platformio/packages/framework-arduinoespressif32 -name boot_app0.bin | head -n1)"
+          if [ -z "$BOOT_APP0" ]; then
+            echo "::error::Không tìm thấy boot_app0.bin trong framework-arduinoespressif32"
+            exit 1
+          fi
+          cp "$BOOT_APP0" toolkit_bundle/firmware/boot_app0.bin
+
+          cd toolkit_bundle
+          zip -r "../release_assets/khong-gian-xanh-toolkit-v${{ steps.ver.outputs.version }}.zip" firmware
+          cd ..
+
+      - name: Tạo Release & đính kèm file .bin
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.files.outputs.tag }}
+          name: "Không Gian Xanh v${{ steps.ver.outputs.version }} (build ${{ github.run_number }})"
+          body: |
+            🌿 **Không Gian Xanh** - Build tự động từ commit `${{ github.sha }}`
+
+            ### File đính kèm
+            - `khong-gian-xanh-firmware-v${{ steps.ver.outputs.version }}.bin` — nạp qua trang **Cập nhật Firmware (OTA)** trong mục Chức năng, hoặc `esptool.py`/PlatformIO khi cắm dây USB.
+            - `khong-gian-xanh-littlefs-v${{ steps.ver.outputs.version }}.bin` — ảnh hệ thống file chứa giao diện web (`index.html`, `tools.html`, `wifi_config.html`). Chỉ cần nạp lại nếu giao diện web có thay đổi.
+            - `khong-gian-xanh-toolkit-v${{ steps.ver.outputs.version }}.zip` — **dùng với esp32-android-toolkit (flash qua điện thoại Android/Termux)**: giải nén rồi chép cả thư mục `firmware/` bên trong đè vào thư mục `firmware/` của toolkit, sau đó chạy `./flash.sh`.
+
+            ### Ghi chú
+            Muốn tăng số phiên bản, sửa `FIRMWARE_VERSION` trong `src/config.h` trước khi push.
+          files: |
+            release_assets/*.bin
+            release_assets/*.zip
+          generate_release_notes: true

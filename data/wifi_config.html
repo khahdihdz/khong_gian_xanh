@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cấu Hình WiFi — Không Gian Xanh</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="theme-color" content="#0c130c">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0c130c; --panel:#182016; --panel-2:#1e2a1a; --line:#31432c;
+  --text:#f5f8ee; --muted:#a7b69c; --muted-2:#77876c;
+  --leaf:#4ade80; --leaf-soft:rgba(74,222,128,.20);
+  --amber:#fbbf24; --amber-soft:rgba(251,191,36,.20);
+  --clay:#fb923c; --clay-soft:rgba(251,146,60,.20);
+  --red:#f87171; --red-soft:rgba(248,113,113,.20);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:
+    radial-gradient(1000px 460px at 15% -10%, rgba(74,222,128,.10), transparent 60%),
+    var(--bg);
+  color:var(--text); font-family:'Be Vietnam Pro',system-ui,sans-serif;
+  min-height:100vh; display:flex; align-items:flex-start; justify-content:center;
+  padding:32px 16px 48px;
+}
+.mono{ font-family:'JetBrains Mono',ui-monospace,monospace; }
+a{ color:var(--leaf); }
+
+.wrap{ width:100%; max-width:440px; }
+
+.heading{ text-align:center; margin-bottom:20px; }
+.heading .mark{ font-size:1.6rem; }
+.heading h1{
+  font-family:'Fraunces',serif; font-weight:600; font-size:1.35rem; margin:6px 0 2px;
+}
+.heading p{ color:var(--muted); font-size:.85rem; margin:0; }
+
+.card{
+  background:var(--panel); border:1px solid var(--line); border-radius:20px;
+  padding:22px;
+}
+
+.field{ margin-bottom:16px; }
+.field label{
+  display:block; font-size:.8rem; color:var(--muted); margin-bottom:6px;
+}
+.field input{
+  width:100%; background:var(--bg); border:1px solid var(--line); color:var(--text);
+  font-family:inherit; font-size:.95rem; padding:11px 13px; border-radius:11px;
+  outline:none; transition:border-color .15s ease;
+}
+.field input:focus{ border-color:var(--leaf); }
+.pass-row{ display:flex; gap:8px; }
+.pass-row input{ flex:1; min-width:0; }
+.pass-row button{
+  flex:none; width:44px; border:1px solid var(--line); background:var(--panel-2);
+  color:var(--text); border-radius:11px; cursor:pointer; font-size:1rem;
+}
+
+.btn-primary{
+  width:100%; padding:12px; border:none; border-radius:11px;
+  background:var(--leaf); color:#0d130a; font-weight:600; font-size:.95rem;
+  cursor:pointer; font-family:inherit;
+}
+.btn-primary:disabled{ opacity:.6; cursor:default; }
+.btn-danger-outline{
+  width:100%; margin-top:14px; padding:10px; border-radius:11px;
+  background:transparent; border:1px solid rgba(248,113,113,.4); color:var(--red);
+  font-size:.85rem; cursor:pointer; font-family:inherit;
+}
+
+.hr{ height:1px; background:var(--line); margin:18px 0; border:none; }
+.hint{ color:var(--muted); font-size:.82rem; line-height:1.55; margin:0; }
+.hint strong{ color:var(--text); }
+
+#msgBox{ display:none; margin-bottom:16px; padding:11px 13px; border-radius:11px; font-size:.85rem; line-height:1.5; }
+#msgBox.ok{ background:var(--leaf-soft); border:1px solid rgba(74,222,128,.4); color:#c7f5d6; }
+#msgBox.err{ background:var(--red-soft); border:1px solid rgba(248,113,113,.4); color:#fdd8d3; }
+
+/* ---- connecting / result panel ---- */
+#connectPanel{ display:none; }
+.spin-row{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+.spinner{
+  width:16px; height:16px; border-radius:50%;
+  border:2px solid var(--line); border-top-color:var(--leaf);
+  animation:spin .8s linear infinite; flex:none;
+}
+@keyframes spin{ to{ transform:rotate(360deg); } }
+.spin-row span{ font-size:.88rem; color:var(--text); }
+.progress-track{ height:4px; border-radius:99px; background:var(--panel-2); overflow:hidden; margin-bottom:14px; }
+.progress-fill{ height:100%; background:var(--leaf); width:0%; transition:width 1s linear; }
+
+.ip-result{ display:none; text-align:center; padding:16px 10px 4px; }
+.ip-result .status-word{ font-size:.82rem; color:var(--leaf); font-weight:600; margin-bottom:8px; }
+.ip-result .ip-value{
+  font-family:'JetBrains Mono',monospace; font-size:1.5rem; font-weight:600;
+  color:var(--text); word-break:break-all;
+}
+.ip-result a.ip-link{
+  display:inline-block; margin-top:10px; padding:9px 18px; border-radius:99px;
+  background:var(--leaf); color:#0d130a; font-weight:600; font-size:.85rem; text-decoration:none;
+}
+.ip-result p{ color:var(--muted); font-size:.8rem; margin:12px 0 0; line-height:1.5; }
+
+.fail-result{ display:none; text-align:center; padding:12px 4px 4px; }
+.fail-result p{ color:var(--muted); font-size:.85rem; line-height:1.55; }
+
+.back-link{ text-align:center; margin-top:18px; }
+.back-link a{ font-size:.85rem; text-decoration:none; color:var(--muted); }
+.back-link a:hover{ color:var(--leaf); }
+
+@media (max-width:400px){
+  body{ padding:22px 12px 40px; }
+  .card{ padding:18px; border-radius:16px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="heading">
+    <div class="mark">📡</div>
+    <h1>Cấu Hình WiFi</h1>
+    <p>Không Gian Xanh</p>
+  </div>
+
+  <div class="card">
+
+    <div id="msgBox"></div>
+
+    <form id="wifiForm">
+      <div class="field">
+        <label for="ssid">Tên mạng WiFi (SSID)</label>
+        <input type="text" id="ssid" name="ssid" placeholder="Nhập tên WiFi nhà bạn" required maxlength="32">
+      </div>
+      <div class="field">
+        <label for="password">Mật khẩu WiFi</label>
+        <div class="pass-row">
+          <input type="password" id="password" name="password" placeholder="Để trống nếu mạng không có mật khẩu" maxlength="64">
+          <button type="button" id="togglePass">👁</button>
+        </div>
+      </div>
+      <button type="submit" class="btn-primary" id="btnSave">Lưu &amp; Kết nối</button>
+    </form>
+
+    <!-- ---- trạng thái đang thử kết nối / kết quả ---- -->
+    <div id="connectPanel">
+      <div class="spin-row" id="connectingRow">
+        <span class="spinner"></span>
+        <span id="connectingText">Đang thử kết nối tới mạng mới...</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+
+      <div class="ip-result" id="ipResult">
+        <div class="status-word">✅ Đã kết nối thành công</div>
+        <div class="ip-value mono" id="ipValue">--</div>
+        <a href="#" class="ip-link" id="ipLink" target="_blank" rel="noopener">Mở Dashboard</a>
+        <p>Đây là địa chỉ IP của thiết bị trên mạng WiFi nhà bạn. Hãy chuyển điện thoại/máy tính sang mạng đó rồi mở địa chỉ trên (hoặc bấm lại vào nút này sau khi đã chuyển mạng).</p>
+      </div>
+
+      <div class="fail-result" id="failResult">
+        <p>⚠️ Chưa xác nhận được kết nối trong thời gian chờ. Thiết bị có thể đã quay lại chế độ phát WiFi <strong>KhongGianXanh-Setup</strong> để bạn cấu hình lại — hoặc mạng của bạn không cho phép ESP32 kết nối. Kiểm tra lại SSID/mật khẩu và thử lại.</p>
+      </div>
+    </div>
+
+    <hr class="hr">
+
+    <p class="hint">
+      Sau khi lưu, ESP32 sẽ thử kết nối tới mạng WiFi trên trong khoảng 15 giây,
+      trong lúc đó vẫn giữ phát WiFi <strong>KhongGianXanh-Setup</strong> để trang này
+      tiếp tục theo dõi và hiển thị IP mới ngay khi có. Nếu thất bại, thiết bị tự
+      động quay lại chế độ cấu hình.
+    </p>
+
+    <button type="button" class="btn-danger-outline" id="btnReset">Xoá cấu hình WiFi đã lưu</button>
+  </div>
+
+  <div class="back-link"><a href="/tools.html">← Quay lại Chức năng</a></div>
+
+</div>
+
+<script>
+document.getElementById('togglePass').addEventListener('click', () => {
+  const pw = document.getElementById('password');
+  pw.type = pw.type === 'password' ? 'text' : 'password';
+});
+
+function showMsg(text, kind) {
+  const box = document.getElementById('msgBox');
+  box.className = kind; // 'ok' | 'err'
+  box.textContent = text;
+  box.style.display = 'block';
+}
+function hideMsg() {
+  document.getElementById('msgBox').style.display = 'none';
+}
+
+// ------------------------------------------------------------
+// Sau khi lưu cấu hình: ESP32 vẫn giữ AP song song trong ~15s
+// trong lúc thử kết nối STA, nên trang này (đang nối vào AP)
+// có thể tiếp tục hỏi /api/info để biết khi nào có IP mới.
+// ------------------------------------------------------------
+const POLL_INTERVAL_MS = 1500;
+const POLL_TIMEOUT_MS = 20000;
+let pollTimer = null;
+let pollDeadline = 0;
+
+function startConnectPolling() {
+  document.getElementById('connectPanel').style.display = 'block';
+  document.getElementById('connectingRow').style.display = 'flex';
+  document.getElementById('ipResult').style.display = 'none';
+  document.getElementById('failResult').style.display = 'none';
+  document.getElementById('progressFill').style.width = '0%';
+
+  pollDeadline = Date.now() + POLL_TIMEOUT_MS;
+  clearInterval(pollTimer);
+  pollTimer = setInterval(pollStatus, POLL_INTERVAL_MS);
+  pollStatus();
+}
+
+async function pollStatus() {
+  const remaining = pollDeadline - Date.now();
+  const pct = Math.max(0, Math.min(100, 100 - (remaining / POLL_TIMEOUT_MS) * 100));
+  document.getElementById('progressFill').style.width = pct + '%';
+
+  if (remaining <= 0) {
+    clearInterval(pollTimer);
+    document.getElementById('connectingRow').style.display = 'none';
+    document.getElementById('failResult').style.display = 'block';
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/info', { cache: 'no-store' });
+    const d = await res.json();
+    if (d.wifi_status === 'Đã kết nối' && d.ip && d.ip !== '0.0.0.0') {
+      clearInterval(pollTimer);
+      document.getElementById('progressFill').style.width = '100%';
+      document.getElementById('connectingRow').style.display = 'none';
+      document.getElementById('ipValue').textContent = d.ip;
+      const link = document.getElementById('ipLink');
+      link.href = 'http://' + d.ip + '/';
+      document.getElementById('ipResult').style.display = 'block';
+    }
+  } catch (e) {
+    // ESP32 có thể tạm không phản hồi trong lúc đang chuyển mạng — thử lại ở vòng kế tiếp
+  }
+}
+
+document.getElementById('wifiForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  hideMsg();
+  const btn = document.getElementById('btnSave');
+  btn.disabled = true;
+  btn.textContent = 'Đang lưu...';
+
+  const formData = new URLSearchParams();
+  formData.append('ssid', document.getElementById('ssid').value);
+  formData.append('password', document.getElementById('password').value);
+
+  try {
+    const res = await fetch('/api/wifi-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData
+    });
+    const data = await res.json();
+    if (data.ok) {
+      showMsg('✅ Đã lưu cấu hình. Đang chờ ESP32 kết nối...', 'ok');
+      startConnectPolling();
+    } else {
+      showMsg('❌ ' + (data.message || 'Có lỗi xảy ra.'), 'err');
+    }
+  } catch (err) {
+    showMsg('❌ Không thể kết nối tới ESP32. Vui lòng thử lại.', 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Lưu & Kết nối';
+  }
+});
+
+document.getElementById('btnReset').addEventListener('click', async () => {
+  if (!confirm('Bạn có chắc muốn xoá cấu hình WiFi đã lưu? ESP32 sẽ chuyển về chế độ phát WiFi AP.')) return;
+  try {
+    const res = await fetch('/api/wifi-reset', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      clearInterval(pollTimer);
+      document.getElementById('connectPanel').style.display = 'none';
+      showMsg('✅ Đã xoá cấu hình. ESP32 đang chuyển sang chế độ AP (SSID: KhongGianXanh-Setup).', 'ok');
+    }
+  } catch (err) {
+    showMsg('❌ Không thể kết nối tới ESP32.', 'err');
+  }
+});
+</script>
+<script src="/common.js"></script></body>
+</html>

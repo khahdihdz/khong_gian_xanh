@@ -1,0 +1,345 @@
+# 🌿 Không Gian Xanh
+
+### Hệ thống ESP32 giám sát môi trường phòng thời gian thực
+
+**Không Gian Xanh** là firmware ESP32 mã nguồn mở giúp theo dõi nhiệt độ, độ ẩm và
+chất lượng không khí trong phòng theo thời gian thực.
+
+**Tính năng chính:**
+- 📟 Hiển thị trực tiếp trên màn hình OLED
+- 🌐 Web Dashboard realtime qua WebSocket, xem trên điện thoại/máy tính trong cùng mạng
+- ☁️ **Xem từ xa (Cloud Relay):** đẩy dữ liệu lên 1 Cloudflare Worker do bạn tự triển khai
+  (miễn phí), xem dashboard từ bất kỳ đâu có internet — **không cần cùng mạng WiFi** với
+  thiết bị. Xem `cloud-relay/` và `cloud-dashboard/`.
+- 🚨 Cảnh báo bằng LED + Buzzer khi vượt ngưỡng nhiệt độ/độ ẩm/AQI
+- 📊 Lưu lịch sử (ring-buffer 1000 bản ghi) **lưu bền vững trên LittleFS** — không mất khi
+  mất điện/khởi động lại; tự loại bỏ các bản ghi có timestamp sai lệch (ghi trước khi đồng
+  bộ NTP xong) để biểu đồ không bị lẫn dữ liệu rác. Xuất CSV.
+- 📶 Tự cấu hình WiFi qua chế độ AP, tự kết nối lại khi mất mạng
+- 🔄 Cập nhật firmware qua mạng (OTA) không cần cắm dây
+- ⚙️ Tự động build & phát hành firmware qua GitHub Actions
+
+💛 Dashboard có nút **"Ủng hộ"** liên kết tới [khahdihdz.github.io](https://khahdihdz.github.io) nếu bạn muốn ủng hộ tác giả.
+
+---
+
+## 1. Linh kiện sử dụng
+
+| Linh kiện | Vai trò | Giao tiếp |
+|---|---|---|
+| [ESP32 DevKit (ESP-32/ESP-32S, 30 chân)](https://shopee.vn/B%E1%BA%A3ng-m%E1%BA%A1ch-ph%C3%A1t-tri%E1%BB%83n-ESP32-WiFi-Bluetooth-Ultra-Low-Power-Core-ESP-32-ESP-32S-ESP-32-Similar-ESP8266-ch%E1%BA%A5t-l%C6%B0%E1%BB%A3ng-cao-i.578443443.13742226706) | Vi điều khiển trung tâm | — |
+| [SHT31-D (module SHT31-D I2C)](https://shopee.vn/Sht31-Nhi%E1%BB%87t-%C4%90%E1%BB%99-SHT31-D-M%C3%B4-%C4%90un-C%E1%BA%A3m-Bi%E1%BA%BFn-%C4%90%E1%BB%99-%E1%BA%A8m-Vi-%C4%90i%E1%BB%81u-Khi%E1%BB%83n-IIC-I2C-%C4%90%E1%BB%99t-Ph%C3%A1-Th%E1%BB%9Di-Ti%E1%BA%BFt-3V-5V-T%C6%B0%C6%A1ng-Th%C3%ADch-Cho-Arduino-i.578443443.25738990383) | Nhiệt độ & độ ẩm | I2C |
+| [Module ENS160 + AHT21 (thay thế CCS811)](https://shopee.vn/C%E1%BA%A3m-bi%E1%BA%BFn-ch%E1%BA%A5t-l%C6%B0%E1%BB%A3ng-kh%C3%B4ng-kh%C3%AD-ENS160-AHT21-CO2-TVOC-eCO2-AQI-C%E1%BA%A3m-bi%E1%BA%BFn-thay-th%E1%BA%BF-CCS811-i.237617462.26627612199) | AQI / TVOC / eCO2 (chỉ dùng phần ENS160) | I2C |
+| [OLED SSD1306 0.96" 128x64](https://shopee.vn/M%C3%B4-%C4%90un-Hi%E1%BB%83N-Th%E1%BB%8B-OLED-4pin-7pin-0.96-IIC-I2C-OLED-0.96-inch-128X64-OLED-0.96-IIC-I2C-Chuy%C3%AAn-D%E1%BB%A5ng-Cho-arduino-i.578443443.23972641115) | Hiển thị tại chỗ | I2C (bản 4 chân) |
+| LED đơn (5mm) + điện trở 220Ω | Cảnh báo trực quan | GPIO |
+| Buzzer thụ động/chủ động 5V hoặc 3.3V | Cảnh báo âm thanh | GPIO |
+
+> Toàn bộ cảm biến đều dùng chuẩn **I2C**, dùng chung 2 dây SDA/SCL — không còn cảm
+> biến giao tiếp 1 dây (như DHT22 kiểu cũ) nên dây nối gọn hơn và không phải lo timing
+> đọc dữ liệu. Module ENS160+AHT21 chỉ dùng phần ENS160 cho AQI/TVOC/eCO2, còn AHT21
+> tích hợp sẵn trên module đó không được đọc vì nhiệt độ/độ ẩm đã lấy từ SHT31-D.
+
+## 2. Sơ đồ nối dây
+
+```
+                          ESP32 DevKit V1 (30 chân)
+                        ┌───────────────────────────┐
+                        │                           │
+  SHT31-D (I2C)         │                           │
+    ┌──────┐             │                           │
+    │  VCC │───────────► │ 3V3                       │
+    │  GND │───────────► │ GND                       │
+    │  SDA │───────────► │ GPIO 21 (SDA)  ┐           │
+    │  SCL │───────────► │ GPIO 22 (SCL)  │           │
+    └──────┘             │                │           │
+                        │                │  Bus I2C  │
+  Module ENS160+AHT21    │                │  dùng     │
+  (chỉ dùng ENS160)      │                │  chung    │
+    ┌──────┐             │                │  cho cả   │
+    │  VCC │───────────► │ 3V3            │  3 thiết  │
+    │  GND │───────────► │ GND            │  bị       │
+    │  SDA │───────────► │ GPIO 21 (SDA)  │           │
+    │  SCL │───────────► │ GPIO 22 (SCL)  │           │
+    └──────┘             │                │           │
+                        │                │           │
+  OLED SSD1306 (I2C,     │                │           │
+  bản 4 chân)            │                │           │
+    ┌──────┐             │                │           │
+    │  VCC │───────────► │ 3V3            │           │
+    │  GND │───────────► │ GND            │           │
+    │  SDA │───────────► │ GPIO 21 (SDA) ◄┘           │
+    │  SCL │───────────► │ GPIO 22 (SCL) ◄┘           │
+    └──────┘             │                           │
+                        │                           │
+      LED trạng thái     │                           │
+    ┌──────┐             │                           │
+    │  A(+)│──[220Ω]───► │ GPIO 25                   │
+    │  K(-)│───────────► │ GND                       │
+    └──────┘             │                           │
+                        │                           │
+      Buzzer (còi)       │                           │
+    ┌──────┐             │                           │
+    │  (+) │───────────► │ GPIO 26                   │
+    │  (-) │───────────► │ GND                       │
+    └──────┘             │                           │
+                        │                           │
+      LED WiFi = LED onboard GPIO 2 (có sẵn trên board, không cần nối)
+                        └───────────────────────────┘
+```
+
+**Ghi chú quan trọng:**
+- Cả 3 thiết bị (SHT31-D, module ENS160+AHT21, OLED) đấu **song song** vào chung 2 dây
+  SDA (GPIO 21) và SCL (GPIO 22) — đúng nguyên tắc bus I2C, không cần dây riêng cho
+  từng thiết bị.
+- Nếu OLED dùng bản 7 chân (có thêm RES/DC/CS cho SPI), chỉ nối 4 chân VCC/GND/SDA/SCL
+  và bỏ qua các chân còn lại — module này hỗ trợ cả hai chế độ nhưng firmware dùng chế độ I2C.
+- Địa chỉ I2C mặc định: SHT31-D là `0x44` (một số bản `0x45` nếu chân ADDR nối VCC),
+  ENS160 là `0x53` (một số bản `0x52`), OLED là `0x3C`. Code đã tự dò cả hai địa chỉ
+  cho SHT31-D và ENS160. Nên kiểm tra lại bằng I2C scanner nếu thiết bị không được nhận diện.
+- Không cần điện trở kéo lên (pull-up) rời cho SDA/SCL — hầu hết module I2C giá rẻ đã
+  có sẵn điện trở pull-up trên board; nếu bus dài hoặc đấu nhiều thiết bị mà không ổn định,
+  có thể thêm 1 cặp điện trở 4.7kΩ cho SDA/SCL.
+- Tất cả cảm biến dùng nguồn **3.3V** (không dùng 5V) vì ESP32 GPIO không chịu được 5V —
+  dù SHT31-D và OLED một số bản ghi hỗ trợ 3V-5V, nên ưu tiên cấp 3.3V để đồng nhất mức
+  logic I2C với ESP32.
+
+---
+
+## 3. Danh sách thư viện cần cài
+
+| Thư viện | Tác giả | Ghi chú |
+|---|---|---|
+| Adafruit SHT31 Library | Adafruit | Đọc nhiệt độ/độ ẩm từ SHT31-D (I2C) |
+| Adafruit Unified Sensor | Adafruit | Phụ thuộc chung của các thư viện Adafruit |
+| Adafruit GFX Library | Adafruit | Vẽ đồ hoạ OLED |
+| Adafruit SSD1306 | Adafruit | Điều khiển màn hình OLED |
+| SparkFun Indoor Air Quality Sensor - ENS160 Arduino Library | SparkFun | Đọc TVOC/eCO2/AQI từ phần ENS160 trên module ENS160+AHT21 (cài qua link GitHub, xem lưu ý bên dưới) |
+| ESPAsyncWebServer | ESP32Async (fork mới) | Web server + WebSocket bất đồng bộ |
+| AsyncTCP | ESP32Async (fork mới) | Phụ thuộc bắt buộc của ESPAsyncWebServer |
+| ElegantOTA | ayushsharma82 | Cập nhật firmware qua web tại `/update` |
+
+> **Lưu ý:** dùng bản fork **ESP32Async/ESPAsyncWebServer** và **ESP32Async/AsyncTCP**
+> (bản mới nhất, tương thích ESP32 core 3.x). Bản cũ của `me-no-dev` đã ngừng cập nhật
+> và có thể lỗi biên dịch với Arduino core mới.
+
+> **Lưu ý về SparkFun ENS160:** thư viện này chưa được đăng ký lên PlatformIO Registry
+> (chỉ tồn tại dưới dạng Arduino Library trên GitHub), nên `platformio.ini` khai báo
+> trực tiếp bằng link Git thay vì tên registry:
+> ```ini
+> https://github.com/sparkfun/SparkFun_Indoor_Air_Quality_Sensor-ENS160_Arduino_Library.git
+> ```
+> Nếu dùng Arduino IDE, tìm "ENS160" trong Library Manager (chọn bản của **SparkFun Electronics**)
+> hoặc tải .zip trực tiếp từ GitHub rồi **Add .ZIP Library**.
+
+### Cài bằng PlatformIO (khuyến nghị)
+Đã khai báo sẵn trong `platformio.ini`, chỉ cần build là PlatformIO tự tải thư viện.
+
+### Cài bằng Arduino IDE
+M�� **Sketch → Include Library → Manage Libraries**, tìm và cài từng thư viện theo tên ở bảng trên.
+Với ESPAsyncWebServer/AsyncTCP, nếu không tìm thấy bản đúng trên Library Manager,
+tải trực tiếp từ GitHub (`ESP32Async/ESPAsyncWebServer`, `ESP32Async/AsyncTCP`) rồi
+**Sketch → Include Library → Add .ZIP Library**.
+
+Cần thêm plugin **ESP32 LittleFS Data Upload** để tải file trong thư mục `data/` lên ESP32
+(xem bước 5 bên dưới).
+
+---
+
+## 4. Cấu trúc dự án
+
+```
+khong_gian_xanh/
+├── platformio.ini          # Cấu hình PlatformIO (board, thư viện, partition)
+├── README.md                # File này
+├── src/                      # Toàn bộ mã nguồn C++ (PlatformIO build từ đây)
+│   ├── main.cpp              # Vòng lặp chính, điều phối các module
+│   ├── config.h               # Cấu hình chân, ngưỡng cảnh báo, hằng số
+│   ├── sensor.h / sensor.cpp   # Đọc SHT31-D + ENS160, phân loại AQI, tự hồi phục lỗi
+│   ├── display.h / display.cpp # Vẽ giao diện OLED SSD1306
+│   ├── wifi_manager.h/.cpp     # Quản lý WiFi STA/AP, lưu Preferences, tự reconnect
+│   ├── web_server.h/.cpp       # Web server, WebSocket, REST API, OTA
+│   └── storage.h / storage.cpp # Ring-buffer lịch sử 1000 bản ghi, xuất JSON/CSV
+├── data/                      # Nội dung upload lên LittleFS (giao diện web cục bộ)
+│   ├── index.html              # Dashboard chính - CHỈ hiển thị theo dõi (Chart.js, dark mode, có nút "❤️ Ủng hộ")
+│   ├── tools.html               # Trang chức năng: xuất CSV, cấu hình WiFi, OTA, Đồng bộ Cloud, thông tin thiết bị
+│   └── wifi_config.html         # Trang cấu hình WiFi (mở từ tools.html)
+├── cloud-relay/               # Cloudflare Worker trung chuyển dữ liệu để xem TỪ XA
+│   ├── worker.js                # Mã nguồn Worker (nhận /ingest từ ESP32, phục vụ /api/* cho dashboard từ xa)
+│   ├── wrangler.toml             # Cấu hình deploy (Wrangler CLI)
+│   └── README.md                 # Hướng dẫn triển khai relay (Cloudflare KV, secrets...)
+└── cloud-dashboard/           # Dashboard TĨNH độc lập, xem từ bất kỳ đâu qua relay ở trên
+    ├── index.html                # Mở trực tiếp hoặc deploy lên Cloudflare Pages/GitHub Pages/Vercel
+    └── README.md                  # Hướng dẫn dùng/triển khai
+```
+
+> Nếu dùng **Arduino IDE** thay vì PlatformIO: tạo 1 thư mục sketch tên `khong_gian_xanh`,
+> copy toàn bộ các file `.cpp/.h` trong `src/` vào thẳng thư mục sketch đó (Arduino IDE không
+> cần thư mục `src/` con), đổi `main.cpp` thành `khong_gian_xanh.ino`. Thư mục `data/` giữ
+> nguyên tên và vị trí (ngang hàng với file `.ino`) để công cụ upload LittleFS nhận diện.
+
+---
+
+## 5. Hướng dẫn nạp code
+
+### Cách A — PlatformIO (khuyến nghị)
+
+```bash
+# 1. Build và nạp firmware
+pio run --target upload
+
+# 2. Nạp giao diện web (LittleFS) — BẮT BUỘC, nếu không dashboard sẽ không hiện
+pio run --target uploadfs
+
+# 3. Mở Serial Monitor để xem log / lấy địa chỉ IP
+pio device monitor
+```
+
+⚠️ **Thứ tự quan trọng:** luôn chạy `uploadfs` sau khi `upload`, nếu không trang web sẽ trả về lỗi 404.
+
+### Cách B — Termux, build trực tiếp trên máy (điện thoại Android, không cần máy tính)
+
+Yêu cầu: cáp OTG + cáp nạp USB-Serial (CP2102/CH340...) nối ESP32 với điện thoại.
+
+```bash
+pkg install -y python git termux-api   # termux-api chỉ cần nếu cổng không tự hiện
+./flash.sh
+```
+
+`flash.sh` sẽ tự làm tất cả: cài PlatformIO (lần đầu), dò tìm ESP32 qua OTG
+(`/dev/ttyUSB*`/`/dev/ttyACM*`, xin quyền USB qua `termux-usb` nếu cần), biên dịch,
+nạp firmware, rồi nạp luôn filesystem `data/` nếu thư mục này tồn tại — không cần
+gõ thêm lệnh nào khác.
+
+> Nếu điện thoại hiện popup xin quyền truy cập USB, hãy bấm **Cho phép**.
+> Nếu ESP32 không tự vào chế độ nạp, giữ nút **BOOT** trên board khi script bắt đầu nạp.
+>
+> ⚠️ Cách này build/nạp trực tiếp bằng PlatformIO (`pio run --target upload`), nên
+> vẫn phụ thuộc `pyserial` để dò cổng USB — trên một số máy/bản Android việc này
+> không ổn định. Nếu gặp lỗi không nhận thiết bị, dùng **Cách D** bên dưới.
+
+### Cách D — esp32-toolkit (khuyến nghị cho Android, không cần build trên máy)
+
+[`esp32-toolkit`](https://github.com/khahdihdz/esp32-toolkit) là **một repo riêng biệt**,
+không nằm trong repo này — cần clone hoặc tải về máy/điện thoại độc lập. Nó nạp firmware
+đã build sẵn (từ GitHub Release của repo `khong_gian_xanh` này) thông qua Android USB Host
+API trực tiếp, không qua `pyserial` nên ổn định hơn trên Android.
+
+```bash
+# 1. Clone repo toolkit về (nếu chưa có), lần này ở ngoài repo khong_gian_xanh
+git clone https://github.com/khahdihdz/esp32-toolkit.git
+cd esp32-toolkit
+
+# 2. Tải file khong-gian-xanh-toolkit-vX.Y.Z.zip từ trang Release của repo khong_gian_xanh
+# 3. Giải nén, chép thư mục firmware/ bên trong đè vào firmware/ của esp32-toolkit
+./flash.sh
+```
+
+`flash.sh` của toolkit sẽ tự nạp cả `firmware.bin` lẫn `littlefs.bin` (dashboard web)
+ở đúng offset theo partition scheme `min_spiffs.csv` mà project này dùng.
+
+### Cách C — Arduino IDE
+
+1. Cài ESP32 board package (`esp32` by Espressif Systems) qua Boards Manager.
+2. Chọn board: **ESP32 Dev Module**.
+3. Chọn **Partition Scheme: Minimal SPIFFS (1.9MB APP / 190KB SPIFFS)** hoặc bất kỳ scheme nào có chừa dung lượng cho OTA — bắt buộc vì firmware dùng ElegantOTA cần vùng nhớ dự phòng để nhận file .bin mới.
+4. Cài plugin **ESP32 LittleFS Data Upload** (Tools → ESP32 Sketch Data Upload) để tải thư mục `data/`.
+5. Nạp code (Upload), sau đó chạy **Tools → ESP32 Sketch Data Upload** để tải giao diện web.
+
+---
+
+## 6. Sử dụng lần đầu
+
+1. Cấp nguồn cho ESP32. Vì chưa có WiFi lưu sẵn, thiết bị tự phát WiFi:
+   - **SSID:** `KhongGianXanh-Setup`
+   - **Mật khẩu:** `12345678`
+2. Dùng điện thoại/máy tính kết nối vào mạng trên.
+3. Mở trình duyệt, truy cập `http://192.168.4.1/wifi_config.html`, nhập SSID/mật khẩu WiFi nhà bạn.
+4. ESP32 sẽ thử kết nối; nếu thành công, xem địa chỉ IP mới qua Serial Monitor và truy cập dashboard tại địa chỉ đó.
+5. Nếu không thành công sau ~15 giây, thiết bị tự quay lại chế độ AP để cấu hình lại.
+
+## 7. API tham khảo
+
+| Endpoint | Method | Mô tả |
+|---|---|---|
+| `/api/data` | GET | Dữ liệu cảm biến hiện tại (JSON) |
+| `/api/history?hours=1\|6\|12\|24\|0` | GET | Lịch sử theo khung giờ (0 = toàn bộ) |
+| `/api/history/csv` | GET | Tải lịch sử dạng CSV |
+| `/api/info` | GET | Thông tin thiết bị (RAM trống, uptime, IP, RSSI...) |
+| `/api/wifi-config` | POST (form: `ssid`, `password`) | Lưu WiFi mới |
+| `/api/wifi-reset` | POST | Xoá WiFi đã lưu, quay về chế độ AP |
+| `/api/cloud-config` | GET | Cấu hình đồng bộ cloud hiện tại (không trả về token thật) |
+| `/api/cloud-config` | POST (form: `url`, `token`, `enabled`) | Lưu cấu hình đồng bộ cloud |
+| `/update` | GET | Trang cập nhật firmware OTA (ElegantOTA) |
+| `/ws` | WebSocket | Đẩy dữ liệu realtime mỗi 2 giây |
+
+## 8. Xem từ xa — không cần cùng mạng WiFi (Cloud Relay)
+
+Dashboard mặc định (`http://<ip-esp32>`) chỉ xem được khi điện thoại/máy tính
+đang cùng mạng LAN/WiFi với ESP32. Để xem được **từ bất kỳ đâu** (4G, ở công
+ty, quán cà phê...), dự án có thêm 1 kênh riêng dùng **Cloudflare Worker**
+làm trạm trung chuyển miễn phí:
+
+```
+ESP32 (mạng nhà) --HTTPS POST mỗi 60s--> Cloudflare Worker + KV --HTTPS GET--> Dashboard (bất kỳ đâu)
+```
+
+**Các bước:**
+1. Triển khai relay: làm theo `cloud-relay/README.md` (cần tài khoản Cloudflare
+   miễn phí + Wrangler CLI), sẽ có 1 URL dạng `https://....workers.dev`.
+2. Trên dashboard cục bộ của ESP32 → **Chức năng → ☁️ Đồng bộ Cloud** → nhập
+   URL relay + token thiết bị, bật công tắc, Lưu. ESP32 sẽ tự đẩy dữ liệu lên
+   relay mỗi 60 giây khi có mạng WiFi (không đẩy lúc đang ở chế độ AP cấu hình).
+3. Mở `cloud-dashboard/index.html` trên điện thoại/máy tính bất kỳ (hoặc deploy
+   thành 1 trang web thật, xem `cloud-dashboard/README.md`) → nhập URL relay +
+   token đọc dữ liệu → xem dữ liệu realtime (poll mỗi 15 giây) từ bất cứ đâu.
+
+Hai kênh hoạt động độc lập: dashboard cục bộ (WebSocket, realtime hơn, không
+cần internet, chỉ cần cùng mạng LAN) vẫn dùng bình thường; kênh cloud chỉ là
+lựa chọn thêm khi cần xem từ xa.
+
+## 9. Tự động Build & Release (GitHub Actions)
+
+M��i khi push code lên nhánh `main` (trừ khi chỉ sửa file `.md`), GitHub Actions sẽ tự động:
+
+1. Build firmware bằng PlatformIO (`pio run`).
+2. Build ảnh hệ thống file LittleFS chứa giao diện web (`pio run -t buildfs`).
+3. Tạo một **Release** mới trên GitHub, gắn tag dạng `v<phiên_bản>-<mã_commit>`.
+4. Đính kèm 2 file `.bin`:
+   - `khong-gian-xanh-firmware-v<version>.bin` — firmware chính.
+   - `khong-gian-xanh-littlefs-v<version>.bin` — ảnh giao diện web (LittleFS).
+
+File workflow: `.github/workflows/release.yml`.
+
+### Cách tăng số phiên bản
+Sửa dòng `FIRMWARE_VERSION` trong `src/config.h` trước khi push:
+```cpp
+#define FIRMWARE_VERSION "1.0.1"
+```
+
+### Cách nạp file `.bin` tải từ trang Releases
+
+**Firmware (`khong-gian-xanh-firmware-*.bin`) — có 2 cách:**
+- **OTA qua web (khuyến nghị, không cần dây):** vào trang **Chức năng → Cập nhật Firmware**
+  (`/update`) trên dashboard, chọn file `.bin` vừa tải, bấm Upload.
+- **Qua USB:** dùng `esptool.py`:
+  ```bash
+  esptool.py --chip esp32 --port <COM_PORT> --baud 921600 write_flash 0x10000 khong-gian-xanh-firmware-v1.0.0.bin
+  ```
+
+**Filesystem (`khong-gian-xanh-littlefs-*.bin`) — chỉ cần nạp lại khi giao diện web thay đổi:**
+- Cách đơn giản nhất: build từ mã nguồn rồi chạy `pio run --target uploadfs`.
+- Hoặc nạp trực tiếp qua USB bằng `esptool.py` (offset phụ thuộc bảng phân vùng
+  `min_spiffs.csv` đang dùng, thường là `0x3D0000` — nên kiểm tra lại bằng lệnh
+  `pio run -t uploadfs --verbose` trên máy có mã nguồn để lấy offset chính xác trước khi flash):
+  ```bash
+  esptool.py --chip esp32 --port <COM_PORT> --baud 921600 write_flash 0x3D0000 khong-gian-xanh-littlefs-v1.0.0.bin
+  ```
+- Trang OTA (`/update`) hiện chỉ hỗ trợ cập nhật firmware, chưa hỗ trợ cập nhật filesystem qua mạng.
+
+## 10. Ngưỡng cảnh báo mặc định (chỉnh trong `config.h`)
+
+- Nhiệt độ > 35°C
+- Độ ẩm > 80%
+- AQI ≥ 4 (Kém trở lên)
+- TVOC ≥ 500 ppb
+- eCO2 ≥ 1200 ppm
