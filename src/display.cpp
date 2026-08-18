@@ -208,7 +208,6 @@ void displayUpdate(const SensorData& data,const String& wifiStatus,const String&
     oled.clearDisplay();
 
     // Chừa không gian cho dấu tiếng Việt của tiêu đề.
-    oled.drawFastHLine(0,13,OLED_WIDTH,SSD1306_WHITE);
     drawVietnamese(2,5,"KHÔNG GIAN XANH");
     if((millis()/500)%2==0) oled.fillCircle(122,7,2,SSD1306_WHITE);
 
@@ -217,14 +216,14 @@ void displayUpdate(const SensorData& data,const String& wifiStatus,const String&
     drawVietnamese(2,27,"Độ ẩm");
     if(data.sht31Ok) { oled.setCursor(54,27); oled.printf("%.0f%%",data.humidity); } else drawVietnamese(54,27,"Lỗi");
 
-    drawVietnamese(2,39,"AQI:");
-    if(data.ens160Ok) drawVietnamese(26,39,data.aqiLabel); else drawVietnamese(26,39,"Lỗi");
-    oled.setCursor(68,39); if(data.ens160Ok) oled.printf("CO2:%d",data.eco2); else oled.print("CO2:--");
-    drawAqiBar(2,47,60,6,data.ens160Ok?data.aqi:0);
+    drawVietnamese(2,37,"AQI:");
+    if(data.ens160Ok) drawVietnamese(26,37,data.aqiLabel); else drawVietnamese(26,37,"Lỗi");
+    oled.setCursor(68,37); if(data.ens160Ok) oled.printf("CO2:%d",data.eco2); else oled.print("CO2:--");
+    drawAqiBar(2,45,60,6,data.ens160Ok?data.aqi:0);
 
-    oled.drawFastHLine(0,55,OLED_WIDTH,SSD1306_WHITE);
-    drawVietnamese(2,57,wifiStatus);
-    oled.setCursor(78,57); oled.print(timeStr);
+    oled.drawFastHLine(0,53,OLED_WIDTH,SSD1306_WHITE);
+    drawVietnamese(2,55,wifiStatus);
+    oled.setCursor(78,55); oled.print(timeStr);
     if(data.warning && (millis()/400)%2==0) oled.drawRect(0,0,OLED_WIDTH,OLED_HEIGHT,SSD1306_WHITE);
     oled.display();
 }
