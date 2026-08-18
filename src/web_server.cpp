@@ -36,6 +36,51 @@ static String currentTimeString() {
     return String(buf);
 }
 
+// Inject the shared site chrome into every HTML page served from LittleFS.
+// Pages only need to be normal HTML files; no duplicated header/footer markup.
+static void serveHtmlWithSharedChrome(AsyncWebServerRequest* request) {
+    String path = request->url();
+    int query = path.indexOf('?');
+    if (query >= 0) path = path.substring(0, query);
+    if (path == "/" || path.length() == 0) path = "/index.html";
+
+    // Never allow a URL to escape LittleFS.
+    if (!path.endsWith(".html") || path.indexOf("..") >= 0) {
+        request->send(404, "text/plain; charset=utf-8", "Không tìm thấy trang.");
+        return;
+    }
+
+    File file = LittleFS.open(path, "r");
+    if (!file) {
+        request->send(404, "text/plain; charset=utf-8", "Không tìm thấy trang.");
+        return;
+    }
+
+    String html = file.readString();
+    file.close();
+
+    // Avoid duplicate injection if a future page already includes the shared assets.
+    if (html.indexOf("/site-common.css") < 0) {
+        int head = html.indexOf("</head>");
+        if (head >= 0) {
+            html = html.substring(0, head)
+                 + "<link rel=\"stylesheet\" href=\"/site-common.css\">\n"
+                 + html.substring(head);
+        }
+    }
+
+    if (html.indexOf("/site-common.js") < 0) {
+        int bodyEnd = html.lastIndexOf("</body>");
+        const String script = "<script src=\"/site-common.js\"></script>\n";
+        if (bodyEnd >= 0) html = html.substring(0, bodyEnd) + script + html.substring(bodyEnd);
+        else html += script;
+    }
+
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=utf-8", html);
+    response->addHeader("Cache-Control", "no-store");
+    request->send(response);
+}
+
 static void onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len) {
     if (type == WS_EVT_CONNECT) Serial.printf("[WS] Client #%u đã kết nối\n", client->id());
     else if (type == WS_EVT_DISCONNECT) Serial.printf("[WS] Client #%u đã ngắt kết nối\n", client->id());
@@ -47,7 +92,12 @@ void webServerInit() {
 
     ws.onEvent(onWsEvent);
     server.addHandler(&ws);
-    server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
+
+    // Shared HTML shell: / and every *.html page receive the same header/nav/footer.
+    // Static assets (CSS/JS/images/CSV/etc.) remain served directly from LittleFS.
+    server.on("/", HTTP_GET, serveHtmlWithSharedChrome);
+    server.on("/*.html", HTTP_GET, serveHtmlWithSharedChrome);
+    server.serveStatic("/", LittleFS, "/");
 
     auto sendData = [](AsyncWebServerRequest* request) {
         extern SensorData g_sensorData;
@@ -98,7 +148,7 @@ void webServerInit() {
     });
 
     server.onNotFound([](AsyncWebServerRequest* request) {
-        request->send(404, "text/plain", "Khong tim thay trang.");
+        request->send(404, "text/plain", "Không tìm thấy trang.");
     });
 
     ElegantOTA.onStart([]() {
