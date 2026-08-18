@@ -19,9 +19,12 @@ static unsigned long s_otaSuccessMs = 0;
 static String buildDataJson(const SensorData& data, const String& wifiStatus, const String& timeStr) {
     String json = "{";
     json += "\"temperature\":" + String(data.sht31Ok ? data.temperature : -99, 1) + ",\"humidity\":" + String(data.sht31Ok ? data.humidity : -1, 1) + ",";
-    json += "\"tvoc\":" + String(data.tvoc) + ",\"eco2\":" + String(data.eco2) + ",\"aqi\":" + String(data.aqi) + ",";
+    json += "\"tvoc\":" + String(data.ens160Ok ? data.tvoc : 0) + ",\"eco2\":" + String(data.ens160Ok ? data.eco2 : 0) + ",\"aqi\":" + String(data.ens160Ok ? data.aqi : 0) + ",";
     json += "\"status\":\"" + data.aqiLabel + "\",\"sht31_ok\":" + String(data.sht31Ok ? "true" : "false") + ",\"ens160_ok\":" + String(data.ens160Ok ? "true" : "false") + ",";
-    json += "\"warning\":" + String(data.warning ? "true" : "false") + ",\"warning_reason\":\"" + data.warningReason + "\",\"wifi_status\":\"" + wifiStatus + "\",\"time\":\"" + timeStr + "\"}";
+    json += "\"warning\":" + String(data.warning ? "true" : "false") + ",\"warning_reason\":\"" + data.warningReason + "\",\"wifi_status\":\"" + wifiStatus + "\",\"wifi_rssi\":" + String(wifiManagerGetRSSI()) + ",";
+    time_t now;
+    time(&now);
+    json += "\"timestamp\":" + String((uint32_t)now) + ",\"time\":\"" + timeStr + "\"}";
     return json;
 }
 
@@ -46,13 +49,18 @@ void webServerInit() {
     server.addHandler(&ws);
     server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
 
-    server.on("/api/data", HTTP_GET, [](AsyncWebServerRequest* request) {
+    auto sendData = [](AsyncWebServerRequest* request) {
         extern SensorData g_sensorData;
         request->send(200, "application/json", buildDataJson(g_sensorData, wifiManagerGetStateText(), currentTimeString()));
-    });
+    };
+
+    server.on("/api/data", HTTP_GET, sendData);
+    // Alias tương thích với các dashboard/web client cũ.
+    server.on("/api/status", HTTP_GET, sendData);
 
     server.on("/api/history", HTTP_GET, [](AsyncWebServerRequest* request) {
         uint8_t hours = request->hasParam("hours") ? request->getParam("hours")->value().toInt() : 0;
+        if (hours > 24) hours = 24;
         request->send(200, "application/json", storageGetHistoryJson(hours));
     });
 
@@ -67,6 +75,7 @@ void webServerInit() {
         json += "\"ok\":true,\"project\":\"" + String(PROJECT_NAME) + "\",\"chip\":\"ESP32\",\"free_heap\":" + String(ESP.getFreeHeap()) + ",\"uptime_ms\":" + String(millis()) + ",";
         json += "\"wifi_status\":\"" + wifiManagerGetStateText() + "\",\"ip\":\"" + wifiManagerGetIP() + "\",\"rssi\":" + String(wifiManagerGetRSSI()) + ",";
         json += "\"record_count\":" + String((int)storageGetRecordCount()) + ",\"firmware_version\":\"" + String(FIRMWARE_VERSION) + "\",";
+        json += "\"history_limit\":" + String(HISTORY_MAX_RECORDS) + ",\"history_interval_ms\":" + String(HISTORY_LOG_INTERVAL_MS) + ",";
         json += "\"transport\":\"HTTP/WebSocket\",\"cloud_enabled\":false,\"cloud_status\":\"disabled\"}";
         request->send(200, "application/json", json);
     });
@@ -92,15 +101,11 @@ void webServerInit() {
         request->send(404, "text/plain", "Khong tim thay trang.");
     });
 
-    // Không unmount LittleFS ở đây. ElegantOTA tự quản lý vùng Update và việc
-    // giữ filesystem mở giúp tránh làm rơi kết nối HTTP đang phục vụ trang OTA.
     ElegantOTA.onStart([]() {
         Serial.println("[OTA] Bắt đầu upload OTA...");
         s_otaRebootPending = false;
     });
 
-    // Không reboot ngay trong callback HTTP. Gửi response 200 trước, sau đó
-    // webServerLoop() mới reboot sau 3 giây để trình duyệt nhận được kết quả.
     ElegantOTA.onEnd([](bool success) {
         if (success) {
             Serial.println("[OTA] Upload thành công. Chờ response HTTP rồi reboot...");
