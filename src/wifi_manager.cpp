@@ -12,6 +12,7 @@ static String s_savedPass;
 static bool s_apModeActive = false;
 static unsigned long s_connectedAtMs = 0;
 static bool s_pendingConnect = false;
+static unsigned long s_pendingConnectAtMs = 0;
 
 // ------------------------------------------------------------
 static void startAPMode() {
@@ -32,14 +33,15 @@ static void tryConnectSTA() {
         return;
     }
 
-    // Nếu AP đang phát (ví dụ người dùng vừa lưu WiFi từ trang cấu hình),
-    // giữ AP sống song song trong lúc thử kết nối STA để HTTP response đã gửi
-    // xong và trang cấu hình còn có thể theo dõi IP mới.
+    // Nếu AP đang phát, giữ AP song song trong lúc thử kết nối STA.
+    // Việc chuyển WiFi được trì hoãn sau khi HTTP response đã có thời gian
+    // gửi về trình duyệt, tránh POST /api/wifi-config bị treo.
     WiFi.mode(s_apModeActive ? WIFI_AP_STA : WIFI_STA);
     WiFi.begin(s_savedSsid.c_str(), s_savedPass.c_str());
     s_state = WIFI_STATE_CONNECTING;
     s_lastAttemptMs = millis();
     s_pendingConnect = false;
+    s_pendingConnectAtMs = 0;
     Serial.print("[WIFI] Đang kết nối tới: ");
     Serial.println(s_savedSsid);
 }
@@ -64,9 +66,10 @@ void wifiManagerInit() {
 void wifiManagerLoop() {
     unsigned long now = millis();
 
-    // Quan trọng: việc bắt đầu WiFi.begin() được trì hoãn tới loop kế tiếp,
-    // sau khi HTTP handler đã có cơ hội trả JSON thành công cho trình duyệt.
-    if (s_pendingConnect && s_state != WIFI_STATE_CONNECTING) {
+    // Chờ ít nhất 1 giây sau khi nhận POST /api/wifi-config rồi mới gọi
+    // WiFi.begin(). Khoảng đệm này giúp AsyncWebServer hoàn tất việc gửi
+    // HTTP response trước khi ESP32 thay đổi trạng thái mạng.
+    if (s_pendingConnect && (long)(now - s_pendingConnectAtMs) >= 0) {
         tryConnectSTA();
     }
 
@@ -77,7 +80,6 @@ void wifiManagerLoop() {
             digitalWrite(LED_WIFI_PIN, HIGH);
             Serial.print("[WIFI] Đã kết nối. IP: ");
             Serial.println(WiFi.localIP());
-            // Giữ AP song song trong thời gian ân hạn để trang cấu hình đọc IP mới.
         } else if (now - s_lastAttemptMs > 15000UL) {
             Serial.println("[WIFI] Kết nối thất bại, chuyển sang chế độ AP.");
             startAPMode();
@@ -103,11 +105,7 @@ void wifiManagerLoop() {
     } else if (s_state == WIFI_STATE_AP_MODE) {
         digitalWrite(LED_WIFI_PIN, (now / 500) % 2);
 
-        // Sau khi lưu cấu hình, chỉ bắt đầu kết nối ở đây, sau khi HTTP response
-        // đã được gửi; không làm gián đoạn request POST /api/wifi-config.
-        if (s_pendingConnect) {
-            tryConnectSTA();
-        } else if (s_savedSsid.length() > 0 && now - s_lastAttemptMs >= WIFI_RECONNECT_INTERVAL_MS) {
+        if (s_savedSsid.length() > 0 && now - s_lastAttemptMs >= WIFI_RECONNECT_INTERVAL_MS) {
             s_lastAttemptMs = now;
             WiFi.mode(WIFI_AP_STA);
             WiFi.begin(s_savedSsid.c_str(), s_savedPass.c_str());
@@ -125,9 +123,10 @@ bool wifiManagerSaveCredentials(const String& ssid, const String& password) {
     s_savedSsid = ssid;
     s_savedPass = password;
 
-    // Không gọi WiFi.begin() trực tiếp trong HTTP callback. Chỉ đánh dấu để
-    // wifiManagerLoop() bắt đầu kết nối sau khi response đã được trả về.
+    // Không gọi WiFi.begin() trong HTTP callback.
+    // Chờ 1 giây rồi mới kết nối để POST có thể hoàn tất bình thường.
     s_pendingConnect = true;
+    s_pendingConnectAtMs = millis() + 1000UL;
     s_lastAttemptMs = millis();
     return true;
 }
@@ -139,6 +138,7 @@ void wifiManagerReset() {
     s_savedSsid = "";
     s_savedPass = "";
     s_pendingConnect = false;
+    s_pendingConnectAtMs = 0;
     startAPMode();
 }
 
@@ -147,10 +147,10 @@ WiFiState wifiManagerGetState() { return s_state; }
 
 String wifiManagerGetStateText() {
     switch (s_state) {
-        case WIFI_STATE_CONNECTED:    return "Đã kết nối";
-        case WIFI_STATE_CONNECTING:   return "Đang kết nối";
-        case WIFI_STATE_AP_MODE:      return "Chế độ AP";
-        default:                      return "Mất kết nối";
+        case WIFI_STATE_CONNECTED:  return "Đã kết nối";
+        case WIFI_STATE_CONNECTING: return "Đang kết nối";
+        case WIFI_STATE_AP_MODE:    return "Chế độ AP";
+        default:                    return "Mất kết nối";
     }
 }
 
