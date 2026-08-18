@@ -8,9 +8,8 @@
 static Adafruit_SSD1306 oled(OLED_WIDTH, OLED_HEIGHT, &Wire, -1);
 static bool s_oledOk = false;
 
-// Font 5x7 tối giản cho các ký tự tiếng Việt thường dùng.
-// Mỗi glyph gồm 5 cột, mỗi cột 7 bit; bit 0 là hàng trên cùng.
-// Các chữ có dấu được ghép từ glyph chữ cái nền + dấu.
+// Font bitmap 5x7/8-bit. Các chữ có dấu được ghép từ glyph nền + dấu.
+// Giữ chiều rộng 6 px/ký tự để không thay đổi layout/chức năng hiện có.
 struct Glyph5x7 { uint32_t cp; uint8_t col[5]; };
 
 static const Glyph5x7 GLYPHS[] PROGMEM = {
@@ -60,67 +59,114 @@ static bool utf8Next(const char* s, size_t len, size_t& i, uint32_t& cp) {
     cp='?'; return true;
 }
 
-// Trả về chữ cái nền và loại dấu tiếng Việt.
-static char vnBase(uint32_t cp, uint8_t& mark, bool& upper) {
-    mark=0; upper=false;
-    switch(cp) {
-        case 0x0110: upper=true; return 'D'; case 0x0111: return 'd';
-        case 0x0102: upper=true; return 'A'; case 0x0103: return 'a';
-        case 0x00C2: upper=true; return 'A'; case 0x00E2: return 'a';
-        case 0x00CA: upper=true; return 'E'; case 0x00EA: return 'e';
-        case 0x00D4: upper=true; return 'O'; case 0x00F4: return 'o';
-        case 0x01A0: upper=true; return 'O'; case 0x01A1: return 'o';
-        case 0x01AF: upper=true; return 'U'; case 0x01B0: return 'u';
-        case 0x00C0: case 0x00C1: case 0x1EA2: case 0x00C3: case 0x1EA0: upper=true; return 'A';
-        case 0x00E0: case 0x00E1: case 0x1EA3: case 0x00E3: case 0x1EA1: return 'a';
-        case 0x00C8: case 0x00C9: case 0x1EBA: case 0x1EBC: case 0x1EB8: upper=true; return 'E';
-        case 0x00E8: case 0x00E9: case 0x1EBB: case 0x1EBD: case 0x1EB9: return 'e';
-        case 0x00CC: case 0x00CD: case 0x1EC8: case 0x0128: case 0x1ECA: upper=true; return 'I';
-        case 0x00EC: case 0x00ED: case 0x1EC9: case 0x0129: case 0x1ECB: return 'i';
-        case 0x00D2: case 0x00D3: case 0x1ECE: case 0x00D5: case 0x1ECC: upper=true; return 'O';
-        case 0x00F2: case 0x00F3: case 0x1ECF: case 0x00F5: case 0x1ECD: return 'o';
-        case 0x00D9: case 0x00DA: case 0x1EE6: case 0x0168: case 0x1EE4: upper=true; return 'U';
-        case 0x00F9: case 0x00FA: case 0x1EE7: case 0x0169: case 0x1EE5: return 'u';
-        case 0x00DD: case 0x1EF6: case 0x1EF8: case 0x1EF4: upper=true; return 'Y';
-        case 0x00FD: case 0x1EF7: case 0x1EF9: case 0x1EF5: return 'y';
+// Tách Unicode tiếng Việt thành chữ nền + hình dạng + dấu thanh.
+// shape: 0 thường, 1 breve (ă), 2 circumflex (â/ê/ô), 3 horn (ơ/ư).
+// tone: 0 không dấu, 1 sắc, 2 huyền, 3 hỏi, 4 ngã, 5 nặng.
+struct VnMap { uint32_t cp; char base; uint8_t shape; uint8_t tone; };
+
+static const VnMap VN_MAP[] PROGMEM = {
+    {0x0110,'D',0,0},{0x0111,'d',0,0},
+    {0x0102,'A',1,0},{0x0103,'a',1,0},
+    {0x00C2,'A',2,0},{0x00E2,'a',2,0}, {0x00CA,'E',2,0},{0x00EA,'e',2,0},
+    {0x00D4,'O',2,0},{0x00F4,'o',2,0}, {0x01A0,'O',3,0},{0x01A1,'o',3,0},
+    {0x01AF,'U',3,0},{0x01B0,'u',3,0},
+
+    {0x00C1,'A',0,1},{0x00C0,'A',0,2},{0x1EA2,'A',0,3},{0x00C3,'A',0,4},{0x1EA0,'A',0,5},
+    {0x00E1,'a',0,1},{0x00E0,'a',0,2},{0x1EA3,'a',0,3},{0x00E3,'a',0,4},{0x1EA1,'a',0,5},
+    {0x00C9,'E',0,1},{0x00C8,'E',0,2},{0x1EBA,'E',0,3},{0x1EBC,'E',0,4},{0x1EB8,'E',0,5},
+    {0x00E9,'e',0,1},{0x00E8,'e',0,2},{0x1EBB,'e',0,3},{0x1EBD,'e',0,4},{0x1EB9,'e',0,5},
+    {0x00CD,'I',0,1},{0x00CC,'I',0,2},{0x1EC8,'I',0,3},{0x0128,'I',0,4},{0x1ECA,'I',0,5},
+    {0x00ED,'i',0,1},{0x00EC,'i',0,2},{0x1EC9,'i',0,3},{0x0129,'i',0,4},{0x1ECB,'i',0,5},
+    {0x00D3,'O',0,1},{0x00D2,'O',0,2},{0x1ECE,'O',0,3},{0x00D5,'O',0,4},{0x1ECC,'O',0,5},
+    {0x00F3,'o',0,1},{0x00F2,'o',0,2},{0x1ECF,'o',0,3},{0x00F5,'o',0,4},{0x1ECD,'o',0,5},
+    {0x00DA,'U',0,1},{0x00D9,'U',0,2},{0x1EE6,'U',0,3},{0x0168,'U',0,4},{0x1EE4,'U',0,5},
+    {0x00FA,'u',0,1},{0x00F9,'u',0,2},{0x1EE7,'u',0,3},{0x0169,'u',0,4},{0x1EE5,'u',0,5},
+    {0x00DD,'Y',0,1},{0x1EF2,'Y',0,2},{0x1EF6,'Y',0,3},{0x1EF8,'Y',0,4},{0x1EF4,'Y',0,5},
+    {0x00FD,'y',0,1},{0x1EF3,'y',0,2},{0x1EF7,'y',0,3},{0x1EF9,'y',0,4},{0x1EF5,'y',0,5},
+
+    // A circumflex + tone
+    {0x1EA4,'A',2,1},{0x1EA6,'A',2,2},{0x1EA8,'A',2,3},{0x1EAA,'A',2,4},{0x1EAC,'A',2,5},
+    {0x1EA5,'a',2,1},{0x1EA7,'a',2,2},{0x1EA9,'a',2,3},{0x1EAB,'a',2,4},{0x1EAD,'a',2,5},
+    // A breve + tone
+    {0x1EAE,'A',1,1},{0x1EB0,'A',1,2},{0x1EB2,'A',1,3},{0x1EB4,'A',1,4},{0x1EB6,'A',1,5},
+    {0x1EAF,'a',1,1},{0x1EB1,'a',1,2},{0x1EB3,'a',1,3},{0x1EB5,'a',1,4},{0x1EB7,'a',1,5},
+    // E circumflex + tone
+    {0x1EBE,'E',2,1},{0x1EC0,'E',2,2},{0x1EC2,'E',2,3},{0x1EC4,'E',2,4},{0x1EC6,'E',2,5},
+    {0x1EBF,'e',2,1},{0x1EC1,'e',2,2},{0x1EC3,'e',2,3},{0x1EC5,'e',2,4},{0x1EC7,'e',2,5},
+    // O circumflex + tone
+    {0x1ED0,'O',2,1},{0x1ED2,'O',2,2},{0x1ED4,'O',2,3},{0x1ED6,'O',2,4},{0x1ED8,'O',2,5},
+    {0x1ED1,'o',2,1},{0x1ED3,'o',2,2},{0x1ED5,'o',2,3},{0x1ED7,'o',2,4},{0x1ED9,'o',2,5},
+    // O horn + tone
+    {0x1EDA,'O',3,1},{0x1EDC,'O',3,2},{0x1EDE,'O',3,3},{0x1EE0,'O',3,4},{0x1EE2,'O',3,5},
+    {0x1EDB,'o',3,1},{0x1EDD,'o',3,2},{0x1EDF,'o',3,3},{0x1EE1,'o',3,4},{0x1EE3,'o',3,5},
+    // U horn + tone
+    {0x1EE8,'U',3,1},{0x1EEA,'U',3,2},{0x1EEC,'U',3,3},{0x1EEE,'U',3,4},{0x1EF0,'U',3,5},
+    {0x1EE9,'u',3,1},{0x1EEB,'u',3,2},{0x1EED,'u',3,3},{0x1EEF,'u',3,4},{0x1EF1,'u',3,5}
+};
+
+static bool vnDecompose(uint32_t cp, char& base, uint8_t& shape, uint8_t& tone) {
+    for (size_t i=0; i<sizeof(VN_MAP)/sizeof(VN_MAP[0]); ++i) {
+        if (pgm_read_dword(&VN_MAP[i].cp) == cp) {
+            base = (char)pgm_read_byte(&VN_MAP[i].base);
+            shape = pgm_read_byte(&VN_MAP[i].shape);
+            tone = pgm_read_byte(&VN_MAP[i].tone);
+            return true;
+        }
     }
-    // Các ký tự ă/â/ê/ô/ơ/ư có dấu thanh: nhận dạng theo bảng Unicode.
-    if ((cp>=0x1E00 && cp<=0x1EFF)) {
-        struct M { uint32_t c; char b; uint8_t m; bool u; };
-        static const M m[] PROGMEM = {
-            {0x1EAF,'a',1,0},{0x1EB1,'a',2,0},{0x1EB3,'a',3,0},{0x1EB5,'a',4,0},{0x1EB7,'a',5,0},
-            {0x1EAE,'A',1,1},{0x1EB0,'A',2,1},{0x1EB2,'A',3,1},{0x1EB4,'A',4,1},{0x1EB6,'A',5,1},
-            {0x1EA5,'a',1,0},{0x1EA7,'a',2,0},{0x1EA9,'a',3,0},{0x1EAB,'a',4,0},{0x1EAD,'a',5,0},
-            {0x1EA4,'A',1,1},{0x1EA6,'A',2,1},{0x1EA8,'A',3,1},{0x1EAA,'A',4,1},{0x1EAC,'A',5,1},
-            {0x1EBF,'e',1,0},{0x1EC1,'e',2,0},{0x1EC3,'e',3,0},{0x1EC5,'e',4,0},{0x1EC7,'e',5,0},
-            {0x1EBE,'E',1,1},{0x1EC0,'E',2,1},{0x1EC2,'E',3,1},{0x1EC4,'E',4,1},{0x1EC6,'E',5,1},
-            {0x1ED1,'o',1,0},{0x1ED3,'o',2,0},{0x1ED5,'o',3,0},{0x1ED7,'o',4,0},{0x1ED9,'o',5,0},
-            {0x1ED0,'O',1,1},{0x1ED2,'O',2,1},{0x1ED4,'O',3,1},{0x1ED6,'O',4,1},{0x1ED8,'O',5,1},
-            {0x1EDB,'o',1,0},{0x1EDD,'o',2,0},{0x1EDF,'o',3,0},{0x1EE1,'o',4,0},{0x1EE3,'o',5,0},
-            {0x1EDA,'O',1,1},{0x1EDC,'O',2,1},{0x1EDE,'O',3,1},{0x1EE0,'O',4,1},{0x1EE2,'O',5,1},
-            {0x1EE9,'u',1,0},{0x1EEB,'u',2,0},{0x1EED,'u',3,0},{0x1EEF,'u',4,0},{0x1EF1,'u',5,0},
-            {0x1EE8,'U',1,1},{0x1EEA,'U',2,1},{0x1EEC,'U',3,1},{0x1EEE,'U',4,1},{0x1EF0,'U',5,1}
-        };
-        for (auto &x:m) { if (pgm_read_dword(&x.c)==cp) { mark=pgm_read_byte(&x.m); upper=pgm_read_byte(&x.u); return (char)pgm_read_byte(&x.b); } }
-    }
-    return 0;
+    base=0; shape=0; tone=0;
+    return false;
 }
 
 static const uint8_t* glyph(uint32_t cp) {
-    for (size_t i=0;i<sizeof(GLYPHS)/sizeof(GLYPHS[0]);++i) if (pgm_read_dword(&GLYPHS[i].cp)==cp) return GLYPHS[i].col;
+    for (size_t i=0;i<sizeof(GLYPHS)/sizeof(GLYPHS[0]);++i)
+        if (pgm_read_dword(&GLYPHS[i].cp)==cp) return GLYPHS[i].col;
     return nullptr;
 }
 
-static void drawGlyph(int x,int y,char ch,uint8_t mark=0) {
+static void drawGlyph(int x,int y,char ch,uint8_t shape=0,uint8_t tone=0) {
     const uint8_t* g=glyph((uint32_t)ch); if(!g) return;
-    for(int c=0;c<5;c++) { uint8_t bits=pgm_read_byte(&g[c]); for(int r=0;r<7;r++) if(bits&(1<<r)) oled.drawPixel(x+c,y+r,SSD1306_WHITE); }
-    if(mark) {
-        // Dấu thanh nhỏ phía trên glyph; ưu tiên không che chữ.
-        if(mark==1) oled.drawPixel(x+2,y-2,SSD1306_WHITE), oled.drawPixel(x+3,y-3,SSD1306_WHITE);
-        else if(mark==2) oled.drawPixel(x+2,y-2,SSD1306_WHITE), oled.drawPixel(x+1,y-3,SSD1306_WHITE);
-        else if(mark==3) oled.drawPixel(x+1,y-3,SSD1306_WHITE), oled.drawPixel(x+3,y-3,SSD1306_WHITE), oled.drawPixel(x+2,y-2,SSD1306_WHITE);
-        else if(mark==4) oled.drawPixel(x+1,y-3,SSD1306_WHITE), oled.drawPixel(x+3,y-3,SSD1306_WHITE);
-        else if(mark==5) oled.drawFastHLine(x+1,y-2,x+3,SSD1306_WHITE);
+
+    // Đọc đủ 8 bit: sửa các glyph có nét đuôi ở bit 7 như g/j/p/q/y.
+    for(int c=0;c<5;c++) {
+        uint8_t bits=pgm_read_byte(&g[c]);
+        for(int r=0;r<8;r++)
+            if(bits&(1<<r)) oled.drawPixel(x+c,y+r,SSD1306_WHITE);
+    }
+
+    // Dấu hình dạng đặt phía trên thân chữ.
+    if(shape==1) { // breve
+        oled.drawPixel(x+1,y-2,SSD1306_WHITE);
+        oled.drawPixel(x+2,y-3,SSD1306_WHITE);
+        oled.drawPixel(x+3,y-2,SSD1306_WHITE);
+    } else if(shape==2) { // circumflex
+        oled.drawPixel(x+1,y-2,SSD1306_WHITE);
+        oled.drawPixel(x+2,y-3,SSD1306_WHITE);
+        oled.drawPixel(x+3,y-2,SSD1306_WHITE);
+    } else if(shape==3) { // horn
+        oled.drawPixel(x+3,y-2,SSD1306_WHITE);
+        oled.drawPixel(x+4,y-3,SSD1306_WHITE);
+    }
+
+    // Dấu thanh: nếu có mũ/breve/móc thì đẩy lên thêm để không chồng nét.
+    if(tone==5) {
+        oled.drawPixel(x+2,y+8,SSD1306_WHITE);
+    } else if(tone) {
+        int ty=shape ? y-5 : y-3;
+        if(tone==1) { // sắc
+            oled.drawPixel(x+2,ty+1,SSD1306_WHITE);
+            oled.drawPixel(x+3,ty,SSD1306_WHITE);
+        } else if(tone==2) { // huyền
+            oled.drawPixel(x+2,ty+1,SSD1306_WHITE);
+            oled.drawPixel(x+1,ty,SSD1306_WHITE);
+        } else if(tone==3) { // hỏi
+            oled.drawPixel(x+1,ty,SSD1306_WHITE);
+            oled.drawPixel(x+2,ty+1,SSD1306_WHITE);
+            oled.drawPixel(x+3,ty,SSD1306_WHITE);
+        } else if(tone==4) { // ngã
+            oled.drawPixel(x+1,ty,SSD1306_WHITE);
+            oled.drawPixel(x+3,ty,SSD1306_WHITE);
+            oled.drawPixel(x+2,ty+1,SSD1306_WHITE);
+        }
     }
 }
 
@@ -128,11 +174,11 @@ static int drawVietnamese(int x,int y,const String& text) {
     size_t i=0,len=text.length();
     while(i<len) {
         uint32_t cp; utf8Next(text.c_str(),len,i,cp);
-        uint8_t mark; bool upper; char base=vnBase(cp,mark,upper);
-        if(base) cp=(uint32_t)base;
+        char base; uint8_t shape,tone;
+        if(vnDecompose(cp,base,shape,tone)) cp=(uint32_t)base;
         const uint8_t* g=glyph(cp);
-        if(g) { drawGlyph(x,y,(char)cp,mark); x+=6; }
-        else { x+=6; }
+        if(g) drawGlyph(x,y,(char)cp,shape,tone);
+        x+=6;
     }
     return x;
 }
@@ -146,8 +192,9 @@ bool displayInit() {
 void displaySplashEffect() {
     if (!s_oledOk) return;
     oled.clearDisplay();
-    drawVietnamese(3,14,"KHÔNG GIAN XANH");
-    drawVietnamese(18,27,"Giám sát môi trường");
+    // Hạ tiêu đề để phần dấu không bị cắt ở mép trên OLED.
+    drawVietnamese(3,5,"KHÔNG GIAN XANH");
+    drawVietnamese(18,19,"Giám sát môi trường");
     oled.display();
     for(int x=0;x<=OLED_WIDTH;x+=8){ oled.drawFastVLine(x,58,6,SSD1306_WHITE); oled.display(); delay(15); }
 }
@@ -159,18 +206,20 @@ static void drawAqiBar(int x,int y,int w,int h,uint8_t aqi) {
 void displayUpdate(const SensorData& data,const String& wifiStatus,const String& timeStr) {
     if(!s_oledOk)return;
     oled.clearDisplay();
-    oled.drawFastHLine(0,10,OLED_WIDTH,SSD1306_WHITE);
-    drawVietnamese(2,1,"KHÔNG GIAN XANH");
-    if((millis()/500)%2==0) oled.fillCircle(122,4,2,SSD1306_WHITE);
 
-    drawVietnamese(2,14,"Nhiệt độ");
-    if(data.sht31Ok) { oled.setCursor(54,14); oled.printf("%.1fC",data.temperature); } else drawVietnamese(54,14,"Lỗi");
-    drawVietnamese(2,26,"Độ ẩm");
-    if(data.sht31Ok) { oled.setCursor(54,26); oled.printf("%.0f%%",data.humidity); } else drawVietnamese(54,26,"Lỗi");
+    // Chừa không gian cho dấu tiếng Việt của tiêu đề.
+    oled.drawFastHLine(0,13,OLED_WIDTH,SSD1306_WHITE);
+    drawVietnamese(2,5,"KHÔNG GIAN XANH");
+    if((millis()/500)%2==0) oled.fillCircle(122,7,2,SSD1306_WHITE);
 
-    drawVietnamese(2,38,"AQI:");
-    if(data.ens160Ok) drawVietnamese(26,38,data.aqiLabel); else drawVietnamese(26,38,"Lỗi");
-    oled.setCursor(68,38); if(data.ens160Ok) oled.printf("CO2:%d",data.eco2); else oled.print("CO2:--");
+    drawVietnamese(2,15,"Nhiệt độ");
+    if(data.sht31Ok) { oled.setCursor(54,15); oled.printf("%.1fC",data.temperature); } else drawVietnamese(54,15,"Lỗi");
+    drawVietnamese(2,27,"Độ ẩm");
+    if(data.sht31Ok) { oled.setCursor(54,27); oled.printf("%.0f%%",data.humidity); } else drawVietnamese(54,27,"Lỗi");
+
+    drawVietnamese(2,39,"AQI:");
+    if(data.ens160Ok) drawVietnamese(26,39,data.aqiLabel); else drawVietnamese(26,39,"Lỗi");
+    oled.setCursor(68,39); if(data.ens160Ok) oled.printf("CO2:%d",data.eco2); else oled.print("CO2:--");
     drawAqiBar(2,47,60,6,data.ens160Ok?data.aqi:0);
 
     oled.drawFastHLine(0,55,OLED_WIDTH,SSD1306_WHITE);
