@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 #define PROJECT_NAME    "Không Gian Xanh"
-#define FIRMWARE_VERSION "1.4.1"
+#define FIRMWARE_VERSION "1.5.0"
 
 #define I2C_SDA_PIN     21
 #define I2C_SCL_PIN     22
