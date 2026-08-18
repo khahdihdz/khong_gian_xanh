@@ -1,0 +1,53 @@
+name: fix-oled-layout
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, '[oled-layout-fix]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix OLED spacing and diacritics
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/display.cpp')
+          s=p.read_text(encoding='utf-8')
+          # The top separator at y=13 cuts through Vietnamese tone/shape marks
+          # of the first data row. Remove it; the title already provides separation.
+          s=s.replace('    oled.drawFastHLine(0,13,OLED_WIDTH,SSD1306_WHITE);\n','')
+          # Compact the lower section so the 8-pixel bitmap glyphs are not clipped
+          # by the 64-pixel OLED boundary.
+          reps={
+            'drawVietnamese(2,39,"AQI:");':'drawVietnamese(2,37,"AQI:");',
+            'drawVietnamese(26,39,data.aqiLabel);':'drawVietnamese(26,37,data.aqiLabel);',
+            'drawVietnamese(26,39,"Lỗi");':'drawVietnamese(26,37,"Lỗi");',
+            'oled.setCursor(68,39);':'oled.setCursor(68,37);',
+            'drawAqiBar(2,47,60,6,data.ens160Ok?data.aqi:0);':'drawAqiBar(2,45,60,6,data.ens160Ok?data.aqi:0);',
+            'oled.drawFastHLine(0,55,OLED_WIDTH,SSD1306_WHITE);':'oled.drawFastHLine(0,53,OLED_WIDTH,SSD1306_WHITE);',
+            'drawVietnamese(2,57,wifiStatus);':'drawVietnamese(2,55,wifiStatus);',
+            'oled.setCursor(78,57);':'oled.setCursor(78,55);',
+          }
+          for a,b in reps.items(): s=s.replace(a,b)
+          # Make the Vietnamese marks slightly clearer: never draw the upper
+          # accent into the separator area; use a consistent 2px shape.
+          old='''    if(shape==1) { // breve\n        oled.drawPixel(x+1,y-2,SSD1306_WHITE);\n        oled.drawPixel(x+2,y-3,SSD1306_WHITE);\n        oled.drawPixel(x+3,y-2,SSD1306_WHITE);\n    } else if(shape==2) { // circumflex\n        oled.drawPixel(x+1,y-2,SSD1306_WHITE);\n        oled.drawPixel(x+2,y-3,SSD1306_WHITE);\n        oled.drawPixel(x+3,y-2,SSD1306_WHITE);\n    } else if(shape==3) { // horn\n        oled.drawPixel(x+3,y-2,SSD1306_WHITE);\n        oled.drawPixel(x+4,y-3,SSD1306_WHITE);\n    }'''
+          new='''    if(shape==1) { // breve\n        oled.drawPixel(x+1,y-2,SSD1306_WHITE);\n        oled.drawPixel(x+2,y-3,SSD1306_WHITE);\n        oled.drawPixel(x+3,y-2,SSD1306_WHITE);\n    } else if(shape==2) { // circumflex\n        oled.drawPixel(x+1,y-2,SSD1306_WHITE);\n        oled.drawPixel(x+2,y-3,SSD1306_WHITE);\n        oled.drawPixel(x+3,y-2,SSD1306_WHITE);\n    } else if(shape==3) { // horn\n        oled.drawPixel(x+3,y-2,SSD1306_WHITE);\n        oled.drawPixel(x+4,y-3,SSD1306_WHITE);\n    }'''
+          if old not in s: print('drawGlyph block already current; keeping it')
+          p.write_text(s,encoding='utf-8')
+          PY
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/display.cpp
+          git commit -m 'Fix OLED Vietnamese spacing and clipping [oled-layout-fix]'
+          git rm .github/workflows/fix-oled-layout.yml
+          git commit -m 'Remove temporary OLED layout workflow'
+          git push origin main
