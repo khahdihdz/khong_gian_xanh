@@ -16,8 +16,8 @@
 .primary{background:var(--g);color:#071007;border:0;font-weight:700}.btn:disabled{opacity:.6;cursor:wait}
 .field{margin:10px 0}.field label{display:block;color:var(--m);font-size:12px;margin-bottom:5px}.field input{width:100%;padding:10px;border-radius:9px;border:1px solid var(--l);background:var(--p2);color:var(--t);font:inherit}
 .status{margin:12px 0;color:var(--m);line-height:1.5}.ok{color:var(--g)}.err{color:var(--r)}.wait{color:var(--a)}
-.row{display:flex;justify-content:space-between;gap:15px;border-bottom:1px solid var(--l);padding:9px 0}
-@media(max-width:600px){.wrap{padding:14px}.bar{padding:14px}.row{flex-direction:column;gap:4px}}
+.row{display:flex;justify-content:space-between;gap:15px;border-bottom:1px solid var(--l);padding:9px 0}.value{font-weight:600;text-align:right}
+@media(max-width:600px){.wrap{padding:14px}.bar{padding:14px}.row{flex-direction:column;gap:4px}.value{text-align:left}}
 </style>
 </head>
 <body>
@@ -27,62 +27,77 @@
 <div class="panel">
 <h3>⬆️ Nâng cấp Firmware (OTA)</h3>
 <p>Firmware được nâng cấp trực tiếp qua WiFi, không cần USB.</p>
-<div class="row"><span>Firmware hiện tại</span><span id="fw">--</span></div>
+<div class="row"><span>Firmware hiện tại</span><span id="fw" class="value">--</span></div>
 <p><a class="btn primary" href="/update" target="_blank" rel="noopener">⬆️ Mở trang nâng cấp Firmware</a></p>
 </div>
 <div class="panel">
 <h3>📶 WiFi</h3>
 <p>Cấu hình WiFi trực tiếp trên ESP32.</p>
-<div class="field"><label>SSID</label><input id="ssid" autocomplete="off" placeholder="Tên mạng WiFi"></div>
-<div class="field"><label>Mật khẩu</label><input id="pass" type="password" autocomplete="new-password" placeholder="Mật khẩu WiFi"></div>
+<div class="row"><span>Trạng thái</span><span id="wifiState" class="value">Đang đọc...</span></div>
+<div class="row"><span>IP</span><span id="wifiIp" class="value">--</span></div>
+<div class="row"><span>Cường độ tín hiệu</span><span id="wifiRssi" class="value">--</span></div>
+<div class="field"><label for="ssid">SSID</label><input id="ssid" autocomplete="off" placeholder="Tên mạng WiFi"></div>
+<div class="field"><label for="pass">Mật khẩu</label><input id="pass" type="password" autocomplete="new-password" placeholder="Mật khẩu WiFi"></div>
 <button id="save" class="btn primary">💾 Lưu & kết nối WiFi</button>
 <button id="reset" class="btn">🗑️ Xóa WiFi</button>
-<div id="wifiStatus" class="status">Đang tải...</div>
+<div id="wifiStatus" class="status">Đang tải trạng thái WiFi...</div>
 </div>
 <div class="panel">
 <h3>ℹ️ Thông tin kết nối</h3>
-<div class="row"><span>Giao thức</span><span>HTTP / WebSocket</span></div>
-<div class="row"><span>Kết nối máy chủ ngoài</span><span>Không sử dụng</span></div>
-<div class="row"><span>IP nội bộ</span><span id="ip">--</span></div>
-<div class="row"><span>RSSI</span><span id="rssi">--</span></div>
-<div class="row"><span>Heap</span><span id="heap">--</span></div>
-<div class="row"><span>Uptime</span><span id="uptime">--</span></div>
+<div class="row"><span>Giao thức</span><span class="value">HTTP / WebSocket</span></div>
+<div class="row"><span>Kết nối máy chủ ngoài</span><span class="value">Không sử dụng</span></div>
+<div class="row"><span>IP nội bộ</span><span id="ip" class="value">--</span></div>
+<div class="row"><span>RSSI</span><span id="rssi" class="value">--</span></div>
+<div class="row"><span>Heap</span><span id="heap" class="value">--</span></div>
+<div class="row"><span>Uptime</span><span id="uptime" class="value">--</span></div>
 <div id="infoStatus" class="status">Đang đọc thông tin...</div>
 </div>
 </main>
 <script>
 const $=id=>document.getElementById(id);
 async function api(url,options={}){
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),10000);
+  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),10000);
   try{return await fetch(url+(url.includes('?')?'&':'?')+'_t='+Date.now(),{...options,cache:'no-store',signal:controller.signal});}
   finally{clearTimeout(timer);}
 }
+function setWifiState(status,ip,rssi){
+  $('wifiState').textContent=status||'Không xác định';
+  $('wifiState').className='value '+(status==='Đã kết nối'?'ok':status==='Đang kết nối'?'wait':'err');
+  $('wifiIp').textContent=ip&&ip!=='0.0.0.0'?ip:'--';
+  $('wifiRssi').textContent=(status==='Đã kết nối'&&typeof rssi==='number'&&rssi!==0)?rssi+' dBm':'--';
+}
 async function loadInfo(){
-  try{const r=await api('/api/info');if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();
+  try{
+    const r=await api('/api/info');if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();
     $('fw').textContent=d.firmware_version||'--';$('ip').textContent=d.ip||'--';$('rssi').textContent=d.rssi!==undefined?d.rssi+' dBm':'--';$('heap').textContent=d.free_heap!==undefined?d.free_heap+' bytes':'--';$('uptime').textContent=d.uptime_ms!==undefined?Math.floor(d.uptime_ms/1000)+' giây':'--';
+    setWifiState(d.wifi_status,d.ip,d.rssi);
+    $('wifiStatus').textContent='📶 WiFi: '+(d.wifi_status||'Không xác định')+(d.ip&&d.ip!=='0.0.0.0'?' — IP '+d.ip:'');
+    $('wifiStatus').className='status '+(d.wifi_status==='Đã kết nối'?'ok':d.wifi_status==='Đang kết nối'?'wait':'err');
     $('infoStatus').textContent='✅ ESP32 đang hoạt động — HTTP/WebSocket';$('infoStatus').className='status ok';
-  }catch(e){$('infoStatus').textContent='❌ Không đọc được thông tin ESP32: '+(e.name==='AbortError'?'hết thời gian chờ':e.message);$('infoStatus').className='status err';}
+  }catch(e){
+    setWifiState('Không đọc được','0.0.0.0',0);
+    $('wifiStatus').textContent='❌ Không đọc được trạng thái WiFi: '+(e.name==='AbortError'?'hết thời gian chờ':e.message);$('wifiStatus').className='status err';
+    $('infoStatus').textContent='❌ Không đọc được thông tin ESP32: '+(e.name==='AbortError'?'hết thời gian chờ':e.message);$('infoStatus').className='status err';
+  }
 }
 $('save').onclick=async()=>{
-  const ssid=$('ssid').value.trim(),password=$('pass').value;
-  if(!ssid){$('wifiStatus').textContent='⚠️ Vui lòng nhập SSID.';return;}
+  const ssid=$('ssid').value.trim(),password=$('pass').value;if(!ssid){$('wifiStatus').textContent='⚠️ Vui lòng nhập SSID.';return;}
   const btn=$('save');btn.disabled=true;$('wifiStatus').textContent='⏳ Đang lưu WiFi...';$('wifiStatus').className='status wait';
   try{
-    const body=new URLSearchParams({ssid,password});
-    const r=await api('/api/wifi-config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8'},body});
+    const body=new URLSearchParams({ssid,password});const r=await api('/api/wifi-config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8'},body});
     const text=await r.text();let d={};try{d=JSON.parse(text)}catch(_){throw new Error('ESP32 trả về dữ liệu không hợp lệ');}
     if(!r.ok||!d.ok)throw new Error(d.message||('HTTP '+r.status));
-    $('wifiStatus').textContent='✅ Đã lưu WiFi. ESP32 sẽ chuyển sang kết nối mạng mới sau giây lát.';$('wifiStatus').className='status ok';$('pass').value='';
+    $('wifiStatus').textContent='⏳ Đã lưu. Đang chờ ESP32 kết nối...';$('wifiStatus').className='status wait';$('pass').value='';
+    setTimeout(loadInfo,1200);setTimeout(loadInfo,3000);setTimeout(loadInfo,6000);
   }catch(e){$('wifiStatus').textContent='❌ '+(e.name==='AbortError'?'ESP32 không phản hồi trong 10 giây. Kiểm tra kết nối mạng.':e.message);$('wifiStatus').className='status err';}
   finally{btn.disabled=false;}
 };
 $('reset').onclick=async()=>{
   if(!confirm('Xóa cấu hình WiFi và chuyển ESP32 sang AP?'))return;
-  try{const r=await api('/api/wifi-reset',{method:'POST'});const d=await r.json();$('wifiStatus').textContent=(d.ok?'✅ ':'❌ ')+(d.message||'');$('wifiStatus').className='status '+(d.ok?'ok':'err');}
+  try{const r=await api('/api/wifi-reset',{method:'POST'});const d=await r.json();$('wifiStatus').textContent=(d.ok?'✅ ':'❌ ')+(d.message||'');$('wifiStatus').className='status '+(d.ok?'ok':'err');setTimeout(loadInfo,1500);}
   catch(e){$('wifiStatus').textContent='❌ '+(e.name==='AbortError'?'ESP32 không phản hồi trong 10 giây.':e.message);$('wifiStatus').className='status err';}
 };
-loadInfo();setInterval(loadInfo,5000);
+loadInfo();setInterval(loadInfo,3000);
 </script>
 <script src="/common.js"></script>
 </body>
