@@ -5,7 +5,7 @@
     ['dashboard', '⌂', 'Tổng quan', '/#dashboard'],
     ['history', '▥', 'Lịch sử', '/#history'],
     ['system', '⚙', 'Hệ thống', '/#system'],
-    ['ota', '↻', 'Cập nhật', '/update']
+    ['ota', '↻', 'Cập nhật', '/update.html']
   ];
 
   function inject() {
@@ -56,7 +56,7 @@
     const path = location.pathname;
     const hash = location.hash.replace('#', '');
     let active = hash || (path === '/' || path === '/index.html' ? 'dashboard' : '');
-    if (path === '/update') active = 'ota';
+    if (path === '/update.html' || path === '/update') active = 'ota';
     const activeLink = header.querySelector(`[data-nav="${active}"]`);
     if (activeLink) activeLink.classList.add('active');
 
