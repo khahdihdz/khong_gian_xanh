@@ -45,14 +45,5 @@
 #define PREF_NAMESPACE       "airmon"
 #define PREF_KEY_SSID        "wifi_ssid"
 #define PREF_KEY_PASS        "wifi_pass"
-#define PREF_KEY_CLOUD_URL   "cloud_url"
-#define PREF_KEY_CLOUD_TOKEN "cloud_tok"
-#define PREF_KEY_CLOUD_ON    "cloud_on"
-
-// Cloudflare Worker WebSocket relay.
-// ESP32 đẩy dữ liệu mỗi 10 giây để phù hợp Workers Free/Durable Objects Free.
-#define CLOUD_SYNC_INTERVAL_MS   10000UL
-#define CLOUD_WS_RECONNECT_MS    5000UL
-#define CLOUD_WS_TIMEOUT_MS      8000UL
 
 #endif // CONFIG_H
