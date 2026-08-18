@@ -33,7 +33,7 @@
     footer.innerHTML = `
       <div class="site-footer-inner">
         <span>Không Gian Xanh · ESP32</span>
-        <span>Powered by <strong>Không Gian Xanh</strong></span>
+        <span>Powered by <a href="https://khahdihdz.github.io" target="_blank" rel="noopener noreferrer"><strong>khahdihdz.github.io</strong></a></span>
         <span>Firmware <span id="siteFirmware">--</span></span>
       </div>`;
 
