@@ -40,7 +40,7 @@ void setup() {
 
     if (!sensorInit()) {
         Serial.println("[MAIN] Cảnh báo: Không có cảm biến hoạt động lúc khởi động.");
-        displayShowError("Khong tim thay cam bien");
+        displayShowError("Không tìm thấy cảm biến");
     }
 
     storageInit();
@@ -55,17 +55,20 @@ void setup() {
 
 static void handleWarning(const SensorData& data) {
     unsigned long now = millis();
-    if (data.warning) {
-        if (now - s_lastBlinkMs >= BLINK_INTERVAL_MS) {
-            s_lastBlinkMs = now;
-            s_ledBlinkState = !s_ledBlinkState;
-            digitalWrite(LED_STATUS_PIN, s_ledBlinkState ? HIGH : LOW);
-            digitalWrite(BUZZER_PIN, s_ledBlinkState ? HIGH : LOW);
-        }
-    } else {
+
+    if (!data.warning) {
         digitalWrite(LED_STATUS_PIN, LOW);
         digitalWrite(BUZZER_PIN, LOW);
         s_ledBlinkState = false;
+        return;
+    }
+
+    // Cảnh báo không chặn loop: LED và buzzer chỉ đổi trạng thái theo chu kỳ.
+    if (now - s_lastBlinkMs >= BLINK_INTERVAL_MS) {
+        s_lastBlinkMs = now;
+        s_ledBlinkState = !s_ledBlinkState;
+        digitalWrite(LED_STATUS_PIN, s_ledBlinkState ? HIGH : LOW);
+        digitalWrite(BUZZER_PIN, s_ledBlinkState ? HIGH : LOW);
     }
 }
 
@@ -80,6 +83,7 @@ static String getTimeString() {
 void loop() {
     unsigned long now = millis();
 
+    // Wi-Fi được xử lý không chặn; cảm biến và OLED vẫn hoạt động khi mất mạng.
     wifiManagerLoop();
 
     if (now - s_lastSensorReadMs >= SENSOR_READ_INTERVAL_MS) {
