@@ -2,13 +2,11 @@
 #include "config.h"
 #include "wifi_manager.h"
 #include "storage.h"
-#include "cloud_sync.h"
 
 #include <LittleFS.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
 #include <ElegantOTA.h>
-#include <Preferences.h>
 #include <time.h>
 
 static AsyncWebServer server(80);
@@ -67,8 +65,7 @@ void webServerInit() {
         json += "\"ok\":true,\"project\":\"" + String(PROJECT_NAME) + "\",\"chip\":\"ESP32\",\"free_heap\":" + String(ESP.getFreeHeap()) + ",\"uptime_ms\":" + String(millis()) + ",";
         json += "\"wifi_status\":\"" + wifiManagerGetStateText() + "\",\"ip\":\"" + wifiManagerGetIP() + "\",\"rssi\":" + String(wifiManagerGetRSSI()) + ",";
         json += "\"record_count\":" + String((int)storageGetRecordCount()) + ",\"firmware_version\":\"" + String(FIRMWARE_VERSION) + "\",";
-        json += "\"transport\":\"HTTP/WebSocket\",\"cloud_enabled\":" + String(cloudSyncIsEnabled() ? "true" : "false") + ",";
-        json += "\"cloud_status\":\"" + cloudSyncGetStatusText() + "\"}";
+        json += "\"transport\":\"HTTP/WebSocket\",\"cloud_enabled\":false,\"cloud_status\":\"disabled\"}";
         request->send(200, "application/json", json);
     });
 
@@ -89,33 +86,10 @@ void webServerInit() {
         request->send(200, "application/json", "{\"ok\":true,\"message\":\"Đã xóa cấu hình WiFi và chuyển sang AP.\"}");
     });
 
-    // Relay HTTP tùy chọn. Không còn MQTT; khi public bằng Cloudflare Tunnel,
-    // dashboard có thể truy cập trực tiếp các API của ESP32 qua cùng hostname.
-    server.on("/api/cloud-config", HTTP_GET, [](AsyncWebServerRequest* request) {
-        String json = "{\"enabled\":" + String(cloudSyncIsEnabled() ? "true" : "false") + ",\"url\":\"" + cloudSyncGetUrl() + "\",\"has_token\":" + String(cloudSyncHasToken() ? "true" : "false") + ",\"status\":\"" + cloudSyncGetStatusText() + "\"}";
-        request->send(200, "application/json", json);
-    });
-
-    server.on("/api/cloud-config", HTTP_POST, [](AsyncWebServerRequest* request) {
-        String url, token;
-        bool enabled = false;
-        if (request->hasParam("url", true)) url = request->getParam("url", true)->value();
-        if (request->hasParam("token", true)) token = request->getParam("token", true)->value();
-        if (request->hasParam("enabled", true)) enabled = request->getParam("enabled", true)->value() == "1";
-        if (!token.length()) token = cloudSyncGetToken();
-        if (enabled && !url.length()) {
-            request->send(400, "application/json", "{\"ok\":false,\"message\":\"Thiếu URL relay\"}");
-            return;
-        }
-        cloudSyncSaveConfig(url, token, enabled);
-        request->send(200, "application/json", "{\"ok\":true,\"message\":\"Đã lưu cấu hình đồng bộ cloud\"}");
-    });
-
     server.onNotFound([](AsyncWebServerRequest* request) {
         request->send(404, "text/plain", "Khong tim thay trang.");
     });
 
-    // ElegantOTA tự đăng ký /update, /ota/start, /ota/upload và /ota/end.
     ElegantOTA.onStart([]() {
         Serial.println("[OTA] Bắt đầu OTA - tạm unmount LittleFS...");
         LittleFS.end();
