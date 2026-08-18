@@ -25,15 +25,21 @@
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     },
     {
-      "name": "MQTT cá nhân",
-      "short_name": "MQTT",
-      "url": "/mqtt_dashboard.html",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
-    },
-    {
       "name": "Chức năng",
       "short_name": "Chức năng",
       "url": "/tools.html",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Wi-Fi",
+      "short_name": "Wi-Fi",
+      "url": "/wifi_config.html",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Nâng cấp OTA",
+      "short_name": "OTA",
+      "url": "/update",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
