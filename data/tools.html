@@ -8,19 +8,15 @@
 <meta http-equiv="Expires" content="0">
 <title>Chức năng — Không Gian Xanh</title>
 <style>
-:root{--bg:#0c130c;--p:#182016;--p2:#1e2a1a;--l:#31432c;--t:#f5f8ee;--m:#a7b69c;--g:#4ade80;--r:#f87171}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--t);font:14px system-ui,sans-serif}
+:root{--bg:#0c130c;--p:#182016;--p2:#1e2a1a;--l:#31432c;--t:#f5f8ee;--m:#a7b69c;--g:#4ade80;--r:#f87171;--a:#fbbf24}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:14px system-ui,sans-serif}
 .bar{padding:16px 20px;border-bottom:1px solid var(--l);display:flex;justify-content:space-between;align-items:center;gap:12px}
-.wrap{max-width:900px;margin:auto;padding:20px}
-.panel{background:var(--p);border:1px solid var(--l);border-radius:16px;padding:18px;margin:16px 0}
+.wrap{max-width:900px;margin:auto;padding:20px}.panel{background:var(--p);border:1px solid var(--l);border-radius:16px;padding:18px;margin:16px 0}
 .btn{border:1px solid var(--l);background:var(--p);color:var(--t);padding:9px 14px;border-radius:10px;cursor:pointer;text-decoration:none;display:inline-block}
-.primary{background:var(--g);color:#071007;border:0;font-weight:700}
-.field{margin:10px 0}.field label{display:block;color:var(--m);font-size:12px;margin-bottom:5px}
-.field input{width:100%;padding:10px;border-radius:9px;border:1px solid var(--l);background:var(--p2);color:var(--t);font:inherit}
-.status{margin:12px 0;color:var(--m);line-height:1.5}.ok{color:var(--g)}.err{color:var(--r)}
+.primary{background:var(--g);color:#071007;border:0;font-weight:700}.btn:disabled{opacity:.6;cursor:wait}
+.field{margin:10px 0}.field label{display:block;color:var(--m);font-size:12px;margin-bottom:5px}.field input{width:100%;padding:10px;border-radius:9px;border:1px solid var(--l);background:var(--p2);color:var(--t);font:inherit}
+.status{margin:12px 0;color:var(--m);line-height:1.5}.ok{color:var(--g)}.err{color:var(--r)}.wait{color:var(--a)}
 .row{display:flex;justify-content:space-between;gap:15px;border-bottom:1px solid var(--l);padding:9px 0}
-.mono{font-family:monospace;word-break:break-all}
 @media(max-width:600px){.wrap{padding:14px}.bar{padding:14px}.row{flex-direction:column;gap:4px}}
 </style>
 </head>
@@ -28,14 +24,12 @@ body{margin:0;background:var(--bg);color:var(--t);font:14px system-ui,sans-serif
 <div class="bar"><b>🌿 Không Gian Xanh</b><a class="btn" href="/">← Dashboard</a></div>
 <main class="wrap">
 <h2>⚙️ Chức năng</h2>
-
 <div class="panel">
 <h3>⬆️ Nâng cấp Firmware (OTA)</h3>
 <p>Firmware được nâng cấp trực tiếp qua WiFi, không cần USB.</p>
 <div class="row"><span>Firmware hiện tại</span><span id="fw">--</span></div>
 <p><a class="btn primary" href="/update" target="_blank" rel="noopener">⬆️ Mở trang nâng cấp Firmware</a></p>
 </div>
-
 <div class="panel">
 <h3>📶 WiFi</h3>
 <p>Cấu hình WiFi trực tiếp trên ESP32.</p>
@@ -45,7 +39,6 @@ body{margin:0;background:var(--bg);color:var(--t);font:14px system-ui,sans-serif
 <button id="reset" class="btn">🗑️ Xóa WiFi</button>
 <div id="wifiStatus" class="status">Đang tải...</div>
 </div>
-
 <div class="panel">
 <h3>ℹ️ Thông tin kết nối</h3>
 <div class="row"><span>Giao thức</span><span>HTTP / WebSocket</span></div>
@@ -57,58 +50,39 @@ body{margin:0;background:var(--bg);color:var(--t);font:14px system-ui,sans-serif
 <div id="infoStatus" class="status">Đang đọc thông tin...</div>
 </div>
 </main>
-
 <script>
 const $=id=>document.getElementById(id);
-async function api(url,options){
-  return fetch(url+(url.includes('?')?'&':'?')+'_t='+Date.now(),Object.assign({cache:'no-store'},options||{}));
+async function api(url,options={}){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),10000);
+  try{return await fetch(url+(url.includes('?')?'&':'?')+'_t='+Date.now(),{...options,cache:'no-store',signal:controller.signal});}
+  finally{clearTimeout(timer);}
 }
-
 async function loadInfo(){
-  try{
-    const r=await api('/api/info');
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    const d=await r.json();
-    $('fw').textContent=d.firmware_version||'--';
-    $('ip').textContent=d.ip||'--';
-    $('rssi').textContent=d.rssi!==undefined?d.rssi+' dBm':'--';
-    $('heap').textContent=d.free_heap!==undefined?d.free_heap+' bytes':'--';
-    $('uptime').textContent=d.uptime_ms!==undefined?Math.floor(d.uptime_ms/1000)+' giây':'--';
-    $('infoStatus').textContent='✅ ESP32 đang hoạt động — HTTP/WebSocket';
-    $('infoStatus').className='status ok';
-  }catch(e){
-    $('infoStatus').textContent='❌ Không đọc được thông tin ESP32: '+e.message;
-    $('infoStatus').className='status err';
-  }
+  try{const r=await api('/api/info');if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();
+    $('fw').textContent=d.firmware_version||'--';$('ip').textContent=d.ip||'--';$('rssi').textContent=d.rssi!==undefined?d.rssi+' dBm':'--';$('heap').textContent=d.free_heap!==undefined?d.free_heap+' bytes':'--';$('uptime').textContent=d.uptime_ms!==undefined?Math.floor(d.uptime_ms/1000)+' giây':'--';
+    $('infoStatus').textContent='✅ ESP32 đang hoạt động — HTTP/WebSocket';$('infoStatus').className='status ok';
+  }catch(e){$('infoStatus').textContent='❌ Không đọc được thông tin ESP32: '+(e.name==='AbortError'?'hết thời gian chờ':e.message);$('infoStatus').className='status err';}
 }
-
 $('save').onclick=async()=>{
   const ssid=$('ssid').value.trim(),password=$('pass').value;
   if(!ssid){$('wifiStatus').textContent='⚠️ Vui lòng nhập SSID.';return;}
-  $('save').disabled=true;
-  $('wifiStatus').textContent='⏳ Đang lưu WiFi...';
+  const btn=$('save');btn.disabled=true;$('wifiStatus').textContent='⏳ Đang lưu WiFi...';$('wifiStatus').className='status wait';
   try{
     const body=new URLSearchParams({ssid,password});
-    const r=await api('/api/wifi-config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
-    const d=await r.json();
-    $('wifiStatus').textContent=(d.ok?'✅ ':'❌ ')+(d.message||'');
-    if(d.ok)$('pass').value='';
-  }catch(e){
-    $('wifiStatus').textContent='❌ Lỗi API WiFi: '+e.message;
-  }finally{$('save').disabled=false;}
+    const r=await api('/api/wifi-config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8'},body});
+    const text=await r.text();let d={};try{d=JSON.parse(text)}catch(_){throw new Error('ESP32 trả về dữ liệu không hợp lệ');}
+    if(!r.ok||!d.ok)throw new Error(d.message||('HTTP '+r.status));
+    $('wifiStatus').textContent='✅ Đã lưu WiFi. ESP32 sẽ chuyển sang kết nối mạng mới sau giây lát.';$('wifiStatus').className='status ok';$('pass').value='';
+  }catch(e){$('wifiStatus').textContent='❌ '+(e.name==='AbortError'?'ESP32 không phản hồi trong 10 giây. Kiểm tra kết nối mạng.':e.message);$('wifiStatus').className='status err';}
+  finally{btn.disabled=false;}
 };
-
 $('reset').onclick=async()=>{
   if(!confirm('Xóa cấu hình WiFi và chuyển ESP32 sang AP?'))return;
-  try{
-    const r=await api('/api/wifi-reset',{method:'POST'});
-    const d=await r.json();
-    $('wifiStatus').textContent=(d.ok?'✅ ':'❌ ')+(d.message||'');
-  }catch(e){$('wifiStatus').textContent='❌ Lỗi API WiFi: '+e.message;}
+  try{const r=await api('/api/wifi-reset',{method:'POST'});const d=await r.json();$('wifiStatus').textContent=(d.ok?'✅ ':'❌ ')+(d.message||'');$('wifiStatus').className='status '+(d.ok?'ok':'err');}
+  catch(e){$('wifiStatus').textContent='❌ '+(e.name==='AbortError'?'ESP32 không phản hồi trong 10 giây.':e.message);$('wifiStatus').className='status err';}
 };
-
-loadInfo();
-setInterval(loadInfo,5000);
+loadInfo();setInterval(loadInfo,5000);
 </script>
 <script src="/common.js"></script>
 </body>
