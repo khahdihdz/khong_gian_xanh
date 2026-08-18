@@ -13,6 +13,8 @@ static AsyncWebServer server(80);
 static AsyncWebSocket ws("/ws");
 static unsigned long s_lastPushMs = 0;
 static unsigned long s_lastCleanupMs = 0;
+static volatile bool s_otaRebootPending = false;
+static unsigned long s_otaSuccessMs = 0;
 
 static String buildDataJson(const SensorData& data, const String& wifiStatus, const String& timeStr) {
     String json = "{";
@@ -90,18 +92,27 @@ void webServerInit() {
         request->send(404, "text/plain", "Khong tim thay trang.");
     });
 
+    // Không unmount LittleFS ở đây. ElegantOTA tự quản lý vùng Update và việc
+    // giữ filesystem mở giúp tránh làm rơi kết nối HTTP đang phục vụ trang OTA.
     ElegantOTA.onStart([]() {
-        Serial.println("[OTA] Bắt đầu OTA - tạm unmount LittleFS...");
-        LittleFS.end();
+        Serial.println("[OTA] Bắt đầu upload OTA...");
+        s_otaRebootPending = false;
     });
+
+    // Không reboot ngay trong callback HTTP. Gửi response 200 trước, sau đó
+    // webServerLoop() mới reboot sau 3 giây để trình duyệt nhận được kết quả.
     ElegantOTA.onEnd([](bool success) {
         if (success) {
-            Serial.println("[OTA] OTA hoàn tất. ESP32 sẽ reboot để mount lại LittleFS.");
+            Serial.println("[OTA] Upload thành công. Chờ response HTTP rồi reboot...");
+            s_otaSuccessMs = millis();
+            s_otaRebootPending = true;
         } else {
-            Serial.println("[OTA] OTA thất bại - mount lại LittleFS...");
-            if (!LittleFS.begin(true)) Serial.println("[OTA] Không thể mount lại LittleFS!");
+            Serial.println("[OTA] Upload thất bại.");
+            s_otaRebootPending = false;
         }
     });
+
+    ElegantOTA.setAutoReboot(false);
     ElegantOTA.begin(&server);
     server.begin();
     Serial.println("[WEB] Web server đã khởi động. HTTP/WebSocket + OTA: /update");
@@ -110,13 +121,22 @@ void webServerInit() {
 void webServerLoop(const SensorData& data, const String& wifiStatus, const String& timeStr) {
     ElegantOTA.loop();
     unsigned long now = millis();
+
     if (now - s_lastPushMs >= WEBSOCKET_PUSH_INTERVAL_MS) {
         s_lastPushMs = now;
         if (ws.count() > 0) ws.textAll(buildDataJson(data, wifiStatus, timeStr));
     }
+
     if (now - s_lastCleanupMs >= 5000) {
         s_lastCleanupMs = now;
         ws.cleanupClients();
+    }
+
+    if (s_otaRebootPending && now - s_otaSuccessMs >= 3000) {
+        s_otaRebootPending = false;
+        Serial.println("[OTA] Reboot sau khi response HTTP đã được gửi.");
+        delay(50);
+        ESP.restart();
     }
 }
 
