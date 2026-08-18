@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Không Gian Xanh</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#eaf2f7;background:#081116}body{margin:0;padding:18px;max-width:1100px;margin:auto}h1{margin:0 0 4px}.muted{opacity:.7}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.card{background:#101d24;border:1px solid #263943;border-radius:14px;padding:14px}.value{font-size:28px;font-weight:700;margin-top:6px}.ok{border-color:#2f6f50}.warn{border-color:#9b7130}.bad{border-color:#9b3b3b}.chart{height:280px;margin-top:14px}.alert{padding:12px;border-radius:10px;margin:10px 0;background:#3a1d1d}.hidden{display:none}button{background:#18323e;color:#fff;border:1px solid #35515d;border-radius:9px;padding:8px 12px}canvas{width:100%;height:100%}</style>
+</head>
+<body>
+<h1>KHÔNG GIAN XANH</h1><div class="muted">Giám sát môi trường theo thời gian thực</div>
+<div id="alert" class="alert hidden"></div>
+<div class="grid" style="margin-top:14px">
+<div id="ct" class="card"><div>Nhiệt độ</div><div class="value" id="temperature">--</div></div>
+<div id="ch" class="card"><div>Độ ẩm</div><div class="value" id="humidity">--</div></div>
+<div id="cc" class="card"><div>CO₂</div><div class="value" id="co2">--</div></div>
+<div id="ca" class="card"><div>AQI</div><div class="value" id="aqi">--</div></div>
+<div id="cv" class="card"><div>TVOC</div><div class="value" id="tvoc">--</div></div>
+</div>
+<div class="card chart"><canvas id="chart"></canvas></div>
+<div style="margin-top:12px"><button onclick="loadHistory()">Làm mới lịch sử</button> <span class="muted" id="updated"></span></div>
+<script>
+const $=id=>document.getElementById(id);
+const chart=$('chart'),ctx=chart.getContext('2d');
+function resize(){chart.width=chart.clientWidth*devicePixelRatio;chart.height=chart.clientHeight*devicePixelRatio;draw(window.historyData||[])} addEventListener('resize',resize);
+function draw(rows){ctx.clearRect(0,0,chart.width,chart.height);if(!rows.length)return;const w=chart.width,h=chart.height,p=32;const vals=rows.map(x=>x.co2);const min=Math.min(...vals),max=Math.max(...vals, min+1);ctx.beginPath();rows.forEach((r,i)=>{const x=p+(w-2*p)*i/Math.max(1,rows.length-1),y=h-p-(r.co2-min)/(max-min)*(h-2*p);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.strokeStyle=getComputedStyle(document.body).color;ctx.lineWidth=3;ctx.stroke();ctx.font=`${12*devicePixelRatio}px system-ui`;ctx.fillText('CO₂ (ppm)',p,18*devicePixelRatio)}
+function setCard(id,bad){$(id).classList.toggle('bad',bad)}
+async function load(){try{const r=await fetch('/api/status');const d=await r.json();$('temperature').textContent=d.temperature==null?'--':d.temperature.toFixed(1)+' °C';$('humidity').textContent=d.humidity==null?'--':d.humidity.toFixed(0)+' %';$('co2').textContent=d.co2==null?'--':d.co2+' ppm';$('tvoc').textContent=d.tvoc==null?'--':d.tvoc+' ppb';$('aqi').textContent=d.aqiLabel||d.aqi||'--';setCard('ct',d.temperature!=null&&d.temperature>35);setCard('ch',d.humidity!=null&&d.humidity>80);setCard('cc',d.co2!=null&&d.co2>=1200);setCard('cv',d.tvoc!=null&&d.tvoc>=500);setCard('ca',d.aqi!=null&&d.aqi>=4);const msgs=[];if(d.temperature>35)msgs.push('Nhiệt độ cao');if(d.humidity>80)msgs.push('Độ ẩm cao');if(d.co2>=1200)msgs.push('CO₂ cao');if(d.tvoc>=500)msgs.push('TVOC cao');if(d.aqi>=4)msgs.push('Chất lượng không khí kém');$('alert').textContent=msgs.length?'⚠ '+msgs.join(' · '):'';$('alert').classList.toggle('hidden',!msgs.length);$('updated').textContent='Cập nhật: '+new Date().toLocaleTimeString('vi-VN')}catch(e){$('alert').textContent='⚠ Không kết nối được ESP32';$('alert').classList.remove('hidden')}}
+async function loadHistory(){try{const r=await fetch('/api/history');window.historyData=await r.json();draw(window.historyData)}catch(e){}}
+load();loadHistory();setInterval(load,5000);setInterval(loadHistory,30000);
+</script>
+</body></html>
