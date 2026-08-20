@@ -42,6 +42,34 @@ jobs:
       - name: Build firmware ESP32
         run: pio run -e esp32dev -v
 
+      - name: Đọc số phiên bản từ config.h
+        id: ver
+        shell: bash
+        run: |
+          VERSION=$(sed -n 's/^#define[[:space:]]\+FIRMWARE_VERSION[[:space:]]\+"\([^"]*\)".*/\1/p' src/config.h | head -n1)
+          if [ -z "$VERSION" ]; then
+            echo "::error::Không đọc được FIRMWARE_VERSION từ src/config.h"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Firmware version: $VERSION"
+          echo "GitHub Actions build number: $GITHUB_RUN_NUMBER"
+
+      - name: Ghi thông tin build vào dashboard
+        shell: bash
+        run: |
+          set -eux
+          cat > data/build-info.json <<EOF
+          {
+            "version": "${{ steps.ver.outputs.version }}",
+            "build": "${{ github.run_number }}",
+            "run_id": "${{ github.run_id }}",
+            "commit": "${{ github.sha }}",
+            "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          cat data/build-info.json
+
       - name: Build filesystem LittleFS
         run: pio run -e esp32dev -t buildfs -v
 
@@ -53,17 +81,6 @@ jobs:
           test -s .pio/build/esp32dev/bootloader.bin
           test -s .pio/build/esp32dev/partitions.bin
           ls -lh .pio/build/esp32dev/*.bin
-
-      - name: Đọc số phiên bản từ config.h
-        id: ver
-        shell: bash
-        run: |
-          VERSION=$(sed -n 's/^#define[[:space:]]\+FIRMWARE_VERSION[[:space:]]\+"\([^"]*\)".*/\1/p' src/config.h | head -n1)
-          if [ -z "$VERSION" ]; then
-            echo "::error::Không đọc được FIRMWARE_VERSION từ src/config.h"
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Chuẩn bị file Release
         id: files
@@ -119,13 +136,18 @@ jobs:
           cat > release_notes.md <<'EOF'
           🌿 Không Gian Xanh - Build tự động từ commit ${{ github.sha }}
 
+          ### Build
+          - Firmware: v${{ steps.ver.outputs.version }}
+          - GitHub Actions build: #${{ github.run_number }}
+          - Commit: ${{ github.sha }}
+
           ### File đính kèm
           - khong-gian-xanh-firmware-v${{ steps.ver.outputs.version }}.bin — firmware ESP32.
           - khong-gian-xanh-littlefs-v${{ steps.ver.outputs.version }}.bin — giao diện web LittleFS.
           - khong-gian-xanh-toolkit-v${{ steps.ver.outputs.version }}.zip — bộ 5 file cho esp32-android-toolkit.
 
           ### Ghi chú
-          Muốn tăng phiên bản, sửa FIRMWARE_VERSION trong src/config.h rồi push lên main.
+          Dashboard hiển thị phiên bản và Build # tự động từ GitHub Actions. Muốn tăng phiên bản firmware, sửa FIRMWARE_VERSION trong src/config.h rồi push lên main.
           EOF
 
           gh release create "$TAG" \
