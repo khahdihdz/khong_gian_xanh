@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 #define PROJECT_NAME    "Không Gian Xanh"
-#define FIRMWARE_VERSION "1.5.0"
+#define FIRMWARE_VERSION "1.6.0"
 
 #define I2C_SDA_PIN     21
 #define I2C_SCL_PIN     22
@@ -30,6 +30,18 @@
 #define HUMIDITY_WARNING_THRESHOLD  80.0f
 #define ECO2_WARNING_THRESHOLD      1200
 #define TVOC_WARNING_THRESHOLD      500
+
+#define CALIBRATION_NAMESPACE       "calibration"
+#define CALIBRATION_KEY_TEMP        "temp_off"
+#define CALIBRATION_KEY_HUM         "hum_off"
+#define TEMP_FILTER_ALPHA           0.20f
+#define HUMIDITY_FILTER_ALPHA       0.20f
+#define TEMP_MIN_VALID              -40.0f
+#define TEMP_MAX_VALID               85.0f
+#define HUMIDITY_MIN_VALID            0.0f
+#define HUMIDITY_MAX_VALID          100.0f
+#define MAX_TEMP_STEP_C               3.0f
+#define MAX_HUMIDITY_STEP_RH         12.0f
 
 #define AP_SSID         "KhongGianXanh-Setup"
 #define AP_PASSWORD     "12345678"
