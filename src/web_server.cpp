@@ -3,6 +3,7 @@
 #include "wifi_manager.h"
 #include "storage.h"
 #include "sensor.h"
+#include "ota_manager.h"
 
 #include <LittleFS.h>
 #include <ESPAsyncWebServer.h>
@@ -80,8 +81,13 @@ void webServerInit() {
     server.on("/api/info", HTTP_GET, [](AsyncWebServerRequest* request) {
         String json = "{"; json += "\"ok\":true,\"project\":\"" + String(PROJECT_NAME) + "\",\"chip\":\"ESP32\",\"free_heap\":" + String(ESP.getFreeHeap()) + ",\"uptime_ms\":" + String(millis()) + ",";
         json += "\"wifi_status\":\"" + wifiManagerGetStateText() + "\",\"ip\":\"" + wifiManagerGetIP() + "\",\"rssi\":" + String(wifiManagerGetRSSI()) + ",\"record_count\":" + String((int)storageGetRecordCount()) + ",\"firmware_version\":\"" + String(FIRMWARE_VERSION) + "\",";
-        json += "\"history_limit\":" + String(HISTORY_MAX_RECORDS) + ",\"history_interval_ms\":" + String(HISTORY_LOG_INTERVAL_MS) + ",\"transport\":\"HTTP/WebSocket\",\"cloud_enabled\":false,\"cloud_status\":\"disabled\"}"; request->send(200, "application/json", json);
+        json += "\"history_limit\":" + String(HISTORY_MAX_RECORDS) + ",\"history_interval_ms\":" + String(HISTORY_LOG_INTERVAL_MS) + ",\"transport\":\"HTTP/WebSocket\",\"cloud_enabled\":false,\"cloud_status\":\"disabled\",\"auto_ota\":" + otaManagerGetInfoJson() + "}";
+        request->send(200, "application/json", json);
     });
+
+    server.on("/api/ota/check", HTTP_POST, [](AsyncWebServerRequest* request) { bool ok = otaManagerCheckNow(); request->send(ok ? 200 : 503, "application/json", otaManagerGetInfoJson()); });
+    server.on("/api/ota/update", HTTP_POST, [](AsyncWebServerRequest* request) { bool ok = otaManagerUpdateNow(); request->send(ok ? 200 : 503, "application/json", otaManagerGetInfoJson()); });
+    server.on("/api/ota/status", HTTP_GET, [](AsyncWebServerRequest* request) { request->send(200, "application/json", otaManagerGetInfoJson()); });
 
     server.on("/api/wifi-config", HTTP_POST, [](AsyncWebServerRequest* request) { String ssid, pass; if (request->hasParam("ssid", true)) ssid = request->getParam("ssid", true)->value(); if (request->hasParam("password", true)) pass = request->getParam("password", true)->value(); if (!ssid.length()) { request->send(400, "application/json", "{\"ok\":false,\"message\":\"Thiếu SSID\"}"); return; } bool ok = wifiManagerSaveCredentials(ssid, pass); request->send(ok ? 200 : 400, "application/json", ok ? "{\"ok\":true,\"message\":\"Đã lưu WiFi và bắt đầu kết nối.\"}" : "{\"ok\":false,\"message\":\"Không lưu được WiFi.\"}"); });
     server.on("/api/wifi-reset", HTTP_POST, [](AsyncWebServerRequest* request) { wifiManagerReset(); request->send(200, "application/json", "{\"ok\":true,\"message\":\"Đã xóa cấu hình WiFi và chuyển sang AP.\"}"); });

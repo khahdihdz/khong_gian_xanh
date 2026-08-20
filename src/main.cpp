@@ -5,7 +5,7 @@
  *  Nền tảng: ESP32 DevKit V1
  *  Cảm biến: SHT31-D + ENS160+AHT21
  *  Hiển thị: OLED SSD1306 128x64
- *  Kết nối: WiFi + HTTP/WebSocket cục bộ
+ *  Kết nối: WiFi + HTTP/WebSocket cục bộ + Auto OTA test
  * ============================================================
  */
 
@@ -18,6 +18,7 @@
 #include "wifi_manager.h"
 #include "web_server.h"
 #include "storage.h"
+#include "ota_manager.h"
 
 static unsigned long s_lastSensorReadMs = 0;
 static unsigned long s_lastDisplayMs = 0;
@@ -28,7 +29,7 @@ static bool s_ledBlinkState = false;
 void setup() {
     Serial.begin(115200);
     delay(200);
-    Serial.println("\n=== KHONG GIAN XANH - HTTP + LOCAL WEBSOCKET ===");
+    Serial.println("\n=== KHONG GIAN XANH - HTTP + LOCAL WEBSOCKET + AUTO OTA TEST ===");
 
     pinMode(LED_STATUS_PIN, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
@@ -45,6 +46,7 @@ void setup() {
 
     storageInit();
     wifiManagerInit();
+    otaManagerInit();
 
     configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER_1, NTP_SERVER_2);
     s_lastNtpSyncMs = millis();
@@ -63,7 +65,6 @@ static void handleWarning(const SensorData& data) {
         return;
     }
 
-    // Cảnh báo không chặn loop: LED và buzzer chỉ đổi trạng thái theo chu kỳ.
     if (now - s_lastBlinkMs >= BLINK_INTERVAL_MS) {
         s_lastBlinkMs = now;
         s_ledBlinkState = !s_ledBlinkState;
@@ -83,8 +84,8 @@ static String getTimeString() {
 void loop() {
     unsigned long now = millis();
 
-    // Wi-Fi được xử lý không chặn; cảm biến và OLED vẫn hoạt động khi mất mạng.
     wifiManagerLoop();
+    otaManagerLoop();
 
     if (now - s_lastSensorReadMs >= SENSOR_READ_INTERVAL_MS) {
         s_lastSensorReadMs = now;
