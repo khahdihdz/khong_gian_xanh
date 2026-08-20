@@ -1,0 +1,31 @@
+name: Test Auto OTA
+
+on:
+  push:
+    branches: ["test/auto-ota"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade pip platformio
+      - name: Build ESP32
+        run: pio run -e esp32dev -v
+      - name: Build LittleFS
+        run: pio run -e esp32dev -t buildfs -v
+      - name: Verify images
+        run: |
+          test -s .pio/build/esp32dev/firmware.bin
+          test -s .pio/build/esp32dev/littlefs.bin
+          ls -lh .pio/build/esp32dev/*.bin
