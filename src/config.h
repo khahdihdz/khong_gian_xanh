@@ -6,6 +6,10 @@
 #define PROJECT_NAME    "Không Gian Xanh"
 #define FIRMWARE_VERSION "1.6.0"
 
+// Auto OTA test: ESP32 checks GitHub Releases every 5 minutes when Internet is available.
+#define AUTO_OTA_CHECK_INTERVAL_MS 300000UL
+#define AUTO_OTA_GITHUB_REPO "khahdihdz/khong_gian_xanh"
+
 #define I2C_SDA_PIN     21
 #define I2C_SCL_PIN     22
 #define OLED_ADDRESS    0x3C
