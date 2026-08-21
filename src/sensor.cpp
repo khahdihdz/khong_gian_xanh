@@ -9,8 +9,8 @@
 static Adafruit_SHT31 sht31 = Adafruit_SHT31();
 static SparkFun_ENS160 ens160;
 static Preferences calibrationPrefs;
-static float s_tempOffset = 0.0f;
-static float s_humidityOffset = 0.0f;
+static float s_tempOffset = HARD_CALIBRATION_ENABLED ? HARD_TEMP_OFFSET_C : 0.0f;
+static float s_humidityOffset = HARD_CALIBRATION_ENABLED ? HARD_HUMIDITY_OFFSET_RH : 0.0f;
 static float s_filteredTemp = NAN;
 static float s_filteredHumidity = NAN;
 
@@ -55,8 +55,10 @@ bool sensorInit() {
     Wire.setClock(400000);
 
     calibrationPrefs.begin(CALIBRATION_NAMESPACE, false);
+#if !HARD_CALIBRATION_ENABLED
     s_tempOffset = calibrationPrefs.getFloat(CALIBRATION_KEY_TEMP, 0.0f);
     s_humidityOffset = calibrationPrefs.getFloat(CALIBRATION_KEY_HUM, 0.0f);
+#endif
 
     g_sensorData.sht31Ok = initSht31();
     if (!g_sensorData.sht31Ok) Serial.println("[SENSOR] Cảnh báo: Không tìm thấy SHT31-D, sẽ thử lại định kỳ.");
@@ -159,6 +161,16 @@ float sensorGetTemperatureOffset() { return s_tempOffset; }
 float sensorGetHumidityOffset() { return s_humidityOffset; }
 
 bool sensorSetCalibration(float tempOffset, float humidityOffset) {
+#if HARD_CALIBRATION_ENABLED
+    // Hiệu chỉnh cứng: dashboard/NVS không được phép thay đổi offset firmware.
+    (void)tempOffset;
+    (void)humidityOffset;
+    s_tempOffset = HARD_TEMP_OFFSET_C;
+    s_humidityOffset = HARD_HUMIDITY_OFFSET_RH;
+    s_filteredTemp = NAN;
+    s_filteredHumidity = NAN;
+    return true;
+#else
     if (!isfinite(tempOffset) || !isfinite(humidityOffset) || tempOffset < -20.0f || tempOffset > 20.0f || humidityOffset < -30.0f || humidityOffset > 30.0f) return false;
     s_tempOffset = tempOffset;
     s_humidityOffset = humidityOffset;
@@ -167,6 +179,16 @@ bool sensorSetCalibration(float tempOffset, float humidityOffset) {
     s_filteredTemp = NAN;
     s_filteredHumidity = NAN;
     return true;
+#endif
 }
 
-void sensorResetCalibration() { sensorSetCalibration(0.0f, 0.0f); }
+void sensorResetCalibration() {
+#if HARD_CALIBRATION_ENABLED
+    s_tempOffset = HARD_TEMP_OFFSET_C;
+    s_humidityOffset = HARD_HUMIDITY_OFFSET_RH;
+    s_filteredTemp = NAN;
+    s_filteredHumidity = NAN;
+#else
+    sensorSetCalibration(0.0f, 0.0f);
+#endif
+}
