@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 #define PROJECT_NAME    "Không Gian Xanh"
-#define FIRMWARE_VERSION "1.6.0"
+#define FIRMWARE_VERSION "1.6.1"
 
 #define I2C_SDA_PIN     21
 #define I2C_SCL_PIN     22
@@ -31,6 +31,14 @@
 #define ECO2_WARNING_THRESHOLD      1200
 #define TVOC_WARNING_THRESHOLD      500
 
+// Hiệu chỉnh CỨNG theo thiết bị tham chiếu đã cung cấp.
+// Giá trị dashboard/NVS không còn được dùng để thay đổi số đo thực tế.
+// SHT31: 28.7 C / 87 %RH -> chuẩn: 28.2 C / 89 %RH
+#define HARD_CALIBRATION_ENABLED    1
+#define HARD_TEMP_OFFSET_C         (-0.5f)
+#define HARD_HUMIDITY_OFFSET_RH   (+2.0f)
+
+// Giữ các khóa để tương thích với cấu hình cũ.
 #define CALIBRATION_NAMESPACE       "calibration"
 #define CALIBRATION_KEY_TEMP        "temp_off"
 #define CALIBRATION_KEY_HUM         "hum_off"
